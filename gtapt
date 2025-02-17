@@ -12,8 +12,6 @@ from tkinter.filedialog import askdirectory
 import json
 import datetime
 import os
-from tkinter import Toplevel
-
 
 
 
@@ -34,6 +32,8 @@ class GTAptWindow:
         # Cria a barra de menu
         self.criar_barra_menu()
         
+
+        
         self.caminho_base_dados = tk.StringVar(value=self.caminho_default())
         self.base_dados = {}  # Inicializa a variável self.base_dados aqui
         self.carregar_preferencias()
@@ -51,13 +51,18 @@ class GTAptWindow:
         self.opcoes_filtro = {}  
         self.filtros_por_entrada = {}
         self.filtros_vars = {}
-
+        self.caixas_texto = []
+        
 
         # Outras configurações da interface
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
         self.criar_abas()
         self.criar_abas_notebook()
+        
+        
+        
+
             
     def configurar_diretorio_base_dados(self):
         # Garante que o diretório e o arquivo base_dados.json estejam configurados corretamente
@@ -128,18 +133,21 @@ class GTAptWindow:
             with open(self.obter_caminho_preferencias(), "r", encoding="utf-8") as arquivo:
                 preferencias = json.load(arquivo)
 
+            print(json.dumps(preferencias, indent=4, ensure_ascii=False))
+
             self.opcoes_filtro = preferencias.get("opcoes_filtro", {})
-            self.filtros_por_entrada = preferencias.get("filtros_por_entrada", {})
-            print(f"📂 Preferências carregadas corretamente? {self.filtros_por_entrada}")
 
+            for categoria, estado in self.opcoes_filtro.items():
+                print(f"🔄 Categoria: {categoria} | Estado Restaurado: {estado}")
 
-            print("Filtros carregados com sucesso!")
         except FileNotFoundError:
             print("❌ Arquivo de preferências não encontrado. Usando valores padrão.")
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar preferências: {e}")
-            
-        print("Preferências carregadas:", self.filtros_por_entrada)
+
+
+
+
 
 
 
@@ -148,9 +156,11 @@ class GTAptWindow:
         caminho_preferencias = self.obter_caminho_preferencias()
 
         preferencias = {
-            "opcoes_filtro": self.opcoes_filtro,
-            "filtros_por_entrada": self.filtros_por_entrada
+            "opcoes_filtro": self.opcoes_filtro
         }
+
+        print("\n--- SALVANDO PREFERÊNCIAS ---")
+        print(json.dumps(preferencias, indent=4, ensure_ascii=False))
 
         try:
             with open(caminho_preferencias, "w", encoding="utf-8") as arquivo:
@@ -159,6 +169,9 @@ class GTAptWindow:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar preferências: {e}")
 
+
+        print("✅ Preferências salvas com sucesso.")
+    
     
     def caminho_default(self):
         # Caminho padrão para o arquivo base_dados.json em "Documentos\GTApt Gestor BBcode"
@@ -174,41 +187,7 @@ class GTAptWindow:
         largura_maxima = max(len(linha) for linha in widget.get("1.0", "end-1c").split("\n"))  # Calcular largura
         widget.configure(height=num_linhas, width=largura_maxima)
 
-    def atualizar_base_dados(caminho_base_dados):
-        """Atualiza a base de dados para incluir a coluna 'Texto Combinado (PT + EN)'."""
-
-        if not os.path.exists(caminho_base_dados):
-            messagebox.showerror("Erro", "Arquivo da base de dados não encontrado!")
-            return
-
-        try:
-            # Carregar a base de dados existente
-            with open(caminho_base_dados, "r", encoding="utf-8") as arquivo:
-                base_dados = json.load(arquivo)
-
-            base_dados_atualizado = {}
-
-            for categoria, conteudos in base_dados.items():
-                novos_conteudos = []
-                for item in conteudos:
-                    if len(item) == 2:  # Se só tem PT e EN, falta o campo PT (EN)
-                        pt, en = item
-                        pt_en = f"{pt} ({en})"
-                        novos_conteudos.append([pt, en, pt_en])  # Adiciona a nova estrutura
-                    else:
-                        novos_conteudos.append(item)  # Mantém a estrutura correta
-
-                base_dados_atualizado[categoria] = novos_conteudos
-
-            # Salvar a base de dados atualizada
-            with open(caminho_base_dados, "w", encoding="utf-8") as arquivo:
-                json.dump(base_dados_atualizado, arquivo, indent=4, ensure_ascii=False)
-
-            messagebox.showinfo("Sucesso", "Base de dados atualizada com sucesso!")
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao atualizar a base de dados: {e}")
-        
+    
     def abrir_base_dados(self):
         """ Abre a janela da base de dados com suporte à rolagem dinâmica, evitando recarregamento desnecessário."""
         if hasattr(self, 'janela_bd') and self.janela_bd.winfo_exists():
@@ -272,6 +251,34 @@ class GTAptWindow:
 
         self.frame_base_dados = scrollable_frame_bd
 
+        """Carrega a base de dados do arquivo e garante que os dados sejam lidos corretamente."""
+        caminho = self.caminho_base_dados.get()
+        print(f"📂 Tentando carregar base de dados do arquivo: {caminho}")
+
+        try:
+            with open(caminho, "r", encoding="utf-8") as arquivo:
+                dados_carregados = json.load(arquivo)
+
+                # ✅ Verifica se os dados são válidos antes de substituir a base de dados
+                if isinstance(dados_carregados, dict):
+                    self.base_dados = dados_carregados
+                    print(f"✅ Base de dados carregada com sucesso: {self.base_dados}")
+                else:
+                    print("❌ Erro: O formato da base de dados está incorreto (esperado um dicionário).")
+                    messagebox.showerror("Erro", "O arquivo da base de dados está corrompido ou mal formatado.")
+        except FileNotFoundError:
+            print("⚠️ Arquivo não encontrado! Criando uma nova base de dados.")
+            self.base_dados = {}
+        except json.JSONDecodeError:
+            print("❌ Erro: JSON inválido! O arquivo pode estar corrompido.")
+            messagebox.showerror("Erro", "O arquivo da base de dados está corrompido ou vazio.")
+            return  # Evita sobrescrever os dados com um dicionário vazio
+
+        self.recriar_interface_categorias()
+
+
+
+
         def rolar_com_mouse(event):
             self.canvas_bd.yview_scroll(-1 * (event.delta // 120), "units")
 
@@ -280,11 +287,23 @@ class GTAptWindow:
         if not self.base_dados:
             try:
                 with open(self.caminho_base_dados.get(), "r", encoding="utf-8") as arquivo:
-                    self.base_dados = json.load(arquivo)
+                    dados_carregados = json.load(arquivo)
+                    
+                    # Verifica se os dados carregados têm o formato correto
+                    if isinstance(dados_carregados, dict):
+                        self.base_dados = dados_carregados
+                        print(f"✅ Base de dados carregada com sucesso: {self.base_dados}")
+                    else:
+                        print("❌ Erro: O JSON tem um formato inesperado!")
+                        messagebox.showerror("Erro", "O arquivo da base de dados está corrompido ou mal formatado.")
             except FileNotFoundError:
+                print("⚠️ Arquivo não encontrado! Criando uma nova base de dados.")
                 self.base_dados = {}
-            except Exception as e:
-                messagebox.showerror("Erro", f"Erro ao carregar a base de dados: {e}")
+            except json.JSONDecodeError:
+                print("❌ Erro: JSON inválido! O arquivo pode estar corrompido.")
+                messagebox.showerror("Erro", "O arquivo da base de dados está corrompido ou vazio.")
+                return  # Evita sobrescrever os dados com um dicionário vazio
+                
 
         self.recriar_interface_categorias()
         self.janela_bd.protocol("WM_DELETE_WINDOW", self.fechar_base_dados)
@@ -303,43 +322,37 @@ class GTAptWindow:
         usados_en = set()
         repetidos_pt = set()
         repetidos_en = set()
-        repetidos_iguais = set()
         duplicados = []
+        iguais = []
         valores_unicos = []
 
-        for pt, en, pt_en in novos_valores:  # ✅ Agora aceita 3 valores corretamente
-            if pt == en:
-                repetidos_iguais.add(pt)  # Guarda valores iguais
-            elif pt in usados_pt:
+        for pt, en in novos_valores:
+            if pt in usados_pt:
                 repetidos_pt.add(pt)
             elif en in usados_en:
                 repetidos_en.add(en)
-            elif (pt, en, pt_en) in valores_existentes:
-                duplicados.append((pt, en, pt_en))
+            elif pt == en:
+                iguais.append((pt, en))
+            elif (pt, en) in valores_existentes:
+                duplicados.append((pt, en))
             else:
-                valores_unicos.append((pt, en, pt_en))
+                valores_unicos.append((pt, en))
                 usados_pt.add(pt)
                 usados_en.add(en)
 
         avisos = {}
-        if repetidos_iguais:
-            avisos["iguais"] = f"Os seguintes conteúdos são iguais em PT e EN e foram ignorados:\n\n{', '.join(repetidos_iguais)}"
         if repetidos_pt:
             avisos["repetidos_pt"] = f"As seguintes entradas em PT estão duplicadas e foram ignoradas:\n\n{', '.join(repetidos_pt)}"
         if repetidos_en:
             avisos["repetidos_en"] = f"As seguintes entradas em EN estão duplicadas e foram ignoradas:\n\n{', '.join(repetidos_en)}"
+        if iguais:
+            iguais_str = "\n".join([f"{pt} | {en}" for pt, en in iguais])
+            avisos["iguais"] = f"Os seguintes pares têm o mesmo valor para PT e EN e foram ignorados:\n\n{iguais_str}"
         if duplicados:
-            duplicados_str = "\n".join([f"{pt} | {en} | {pt_en}" for pt, en, pt_en in duplicados])
+            duplicados_str = "\n".join([f"{pt} | {en}" for pt, en in duplicados])
             avisos["duplicados"] = f"Os seguintes pares já existem na categoria e foram ignorados:\n\n{duplicados_str}"
 
-        # Exibir alertas se houver avisos
-        if avisos:
-            mensagem = "\n\n".join(avisos.values())
-            messagebox.showwarning("Aviso de Validação", mensagem)
-
         return {"valores_unicos": valores_unicos, "avisos": avisos}
-
-
 
 
 
@@ -410,18 +423,8 @@ class GTAptWindow:
                 messagebox.showerror("Erro", "O número de linhas em PT e EN deve ser igual.")
                 return
 
-            # Criar lista formatada com PT, EN e PT (EN)
-            novos_valores = {(pt, en, f"{pt} ({en})") for pt, en in zip(textos_pt, textos_en)}
-
-            valores_existentes = set(map(tuple, self.base_dados.get(nome_categoria, [])))
-
-            # Realiza a validação dos valores antes de salvar
-            resultado_validacao = self.validar_valores_categoria(novos_valores, valores_existentes)
-            valores_unicos = resultado_validacao["valores_unicos"]
-
-            if not valores_unicos:
-                messagebox.showinfo("Nenhum Conteúdo Válido", "Todos os valores foram ignorados por serem inválidos ou repetidos.")
-                return
+            # Criar termos combinados PT (EN)
+            novos_valores = [[pt, en, f"{pt} ({en})"] for pt, en in zip(textos_pt, textos_en)]
 
             # Caso a categoria já exista
             if nome_categoria in self.base_dados:
@@ -430,23 +433,19 @@ class GTAptWindow:
                     f"A categoria '{nome_categoria}' já existe. Deseja adicionar os novos valores à categoria existente?"
                 )
                 if resposta:  # Adicionar aos valores existentes
-                    self.base_dados[nome_categoria] = list(valores_existentes.union(valores_unicos))
+                    valores_existentes = {tuple(item) for item in self.base_dados[nome_categoria]}
+                    novos_valores = list(valores_existentes.union(map(tuple, novos_valores)))
                 else:  # Substituir os valores existentes
-                    self.base_dados[nome_categoria] = list(valores_unicos)
-            else:
-                # Caso seja uma nova categoria
-                self.base_dados[nome_categoria] = list(valores_unicos)
+                    novos_valores = list(map(tuple, novos_valores))
 
-            # Atualizar a interface
+            self.base_dados[nome_categoria] = novos_valores
             self.recriar_interface_categorias()
             self.salvar_base_dados()
-
             janela_criar.destroy()
 
+            
         # Botão de salvar
         ttk.Button(frame_principal, text="Salvar", command=salvar_categoria).grid(row=3, column=1, pady=10, sticky="e")
-
-
 
 
 
@@ -560,48 +559,12 @@ class GTAptWindow:
 
         
         
-    def validar_valores_categoria(self, novos_valores, valores_existentes):
-        usados_pt = set()
-        usados_en = set()
-        repetidos_pt = set()
-        repetidos_en = set()
-        repetidos_iguais = set()  # Para valores iguais em PT e EN
-        duplicados = []
-        valores_unicos = []
-
-        for pt, en, pt_en in novos_valores:
-            if pt == en:
-                repetidos_iguais.add(pt)  # Guarda os valores iguais
-            elif pt in usados_pt:
-                repetidos_pt.add(pt)
-            elif en in usados_en:
-                repetidos_en.add(en)
-            elif (pt, en) in valores_existentes:
-                duplicados.append((pt, en))
-            else:
-                valores_unicos.append((pt, en))
-                usados_pt.add(pt)
-                usados_en.add(en)
-
-        avisos = {}
-        if repetidos_iguais:
-            avisos["iguais"] = f"Os seguintes conteúdos são iguais em PT e EN e foram ignorados:\n\n{', '.join(repetidos_iguais)}"
-        if repetidos_pt:
-            avisos["repetidos_pt"] = f"As seguintes entradas em PT estão duplicadas e foram ignoradas:\n\n{', '.join(repetidos_pt)}"
-        if repetidos_en:
-            avisos["repetidos_en"] = f"As seguintes entradas em EN estão duplicadas e foram ignoradas:\n\n{', '.join(repetidos_en)}"
-        if duplicados:
-            duplicados_str = "\n".join([f"{pt} | {en}" for pt, en in duplicados])
-            avisos["duplicados"] = f"Os seguintes pares já existem na categoria e foram ignorados:\n\n{duplicados_str}"
-
-        # Exibir alertas se houver avisos
-        if avisos:
-            mensagem = "\n\n".join(avisos.values())
-            messagebox.showwarning("Aviso de Validação", mensagem)
-
-        return {"valores_unicos": valores_unicos, "avisos": avisos}
-
-
+    def preencher_conteudo_textbox(self, conteudo_textbox, valores):
+        """Preenche o widget de texto com os valores formatados."""
+        conteudo_textbox.delete("1.0", "end")  # Limpa o conteúdo anterior
+        for pt, en in valores:
+            # Reutiliza a lógica existente no método criar_conteudo_frame
+            conteudo_textbox.insert("end", f"{pt}       |       {en}        |       {pt} ({en})\n")
 
         
     def apagar_categoria(self, categoria):
@@ -683,62 +646,52 @@ class GTAptWindow:
 
 
     def preencher_conteudo_categoria(self, frame_categoria, categoria):
-        """Preenche o frame com os dados da categoria, ordenados por PT, usando colunas com separadores verticais e permitindo a seleção do texto com o cursor, além de adicionar menu de contexto para copiar."""
+        """Preenche o frame da categoria com os valores ordenados corretamente."""
         
         # Limpar o frame antes de preencher
         for widget in frame_categoria.winfo_children():
             widget.destroy()
 
-        # Ordenar pelo texto PT
         conteudo_ordenado = sorted(
             self.base_dados[categoria], 
-            key=lambda x: self.ordena_alfanumerico(x[0])
+            key=lambda x: self.ordena_alfanumerico(x[0])  # Ordenar pelo texto PT
         )
 
-        # Definir a cor de fundo padrão
         bg_color = "#F0F0F0"
 
-        # Calcular a largura das colunas dinamicamente
+        # Calcular larguras dinamicamente
         max_pt_len = max(len(pt) for pt, en, pt_en in conteudo_ordenado)
         max_en_len = max(len(en) for pt, en, pt_en in conteudo_ordenado)
         max_pt_en_len = max(len(pt_en) for pt, en, pt_en in conteudo_ordenado)
 
-        # Adicionar os valores como labels nas colunas
         for index, (pt, en, pt_en) in enumerate(conteudo_ordenado):
-            # Coluna 1 (PT)
+            # Coluna PT
             pt_text = tk.Text(frame_categoria, height=1, width=max_pt_len, wrap="none", bd=0, relief="flat", bg=bg_color, font=("Arial", 10))
             pt_text.grid(row=index, column=0, sticky="w", padx=5, pady=2)
             pt_text.insert("1.0", pt)
             pt_text.config(state="disabled")
-            pt_text.bind("<Button-3>", lambda e, text_widget=pt_text: self.criar_menu_contexto(e, text_widget))
 
             separator1 = ttk.Separator(frame_categoria, orient="vertical")
             separator1.grid(row=index, column=1, sticky="ns", padx=5, pady=2)
 
-            # Coluna 2 (EN)
+            # Coluna EN
             en_text = tk.Text(frame_categoria, height=1, width=max_en_len, wrap="none", bd=0, relief="flat", bg=bg_color, font=("Arial", 10))
             en_text.grid(row=index, column=2, sticky="w", padx=5, pady=2)
             en_text.insert("1.0", en)
             en_text.config(state="disabled")
-            en_text.bind("<Button-3>", lambda e, text_widget=en_text: self.criar_menu_contexto(e, text_widget))
 
             separator2 = ttk.Separator(frame_categoria, orient="vertical")
             separator2.grid(row=index, column=3, sticky="ns", padx=5, pady=2)
 
-            # Coluna 3 (PT + EN)
+            # Coluna PT (EN)
             pt_en_text = tk.Text(frame_categoria, height=1, width=max_pt_en_len, wrap="none", bd=0, relief="flat", bg=bg_color, font=("Arial", 10))
             pt_en_text.grid(row=index, column=4, sticky="w", padx=5, pady=2)
             pt_en_text.insert("1.0", pt_en)
             pt_en_text.config(state="disabled")
-            pt_en_text.bind("<Button-3>", lambda e, text_widget=pt_en_text: self.criar_menu_contexto(e, text_widget))
 
-        # Configuração dinâmica de layout
         frame_categoria.grid_columnconfigure(0, weight=1)
-        frame_categoria.grid_columnconfigure(1, weight=0)  # Separator 1
         frame_categoria.grid_columnconfigure(2, weight=1)
-        frame_categoria.grid_columnconfigure(3, weight=0)  # Separator 2
         frame_categoria.grid_columnconfigure(4, weight=1)
-        frame_categoria.grid_rowconfigure(0, weight=1)
 
         
         
@@ -749,108 +702,60 @@ class GTAptWindow:
 
 
     def editar_categoria(self, categoria):
-        """Abre uma janela para editar os valores da categoria."""
+        """Abre uma janela para editar os valores da categoria, carregando corretamente PT e EN."""
         janela_editar = tk.Toplevel(self.root)
         janela_editar.title(f"Editar Categoria: {categoria}")
         janela_editar.geometry("650x450")
 
-        # Frame principal com rolagem
-        frame_principal = ttk.Frame(janela_editar)
-        frame_principal.pack(fill="both", expand=True, padx=10, pady=10)
+        # Configuração do layout
+        janela_editar.grid_columnconfigure(0, weight=1)
+        janela_editar.grid_columnconfigure(1, weight=1)
 
-        # Canvas para rolagem
-        canvas = tk.Canvas(frame_principal)
-        scrollbar_y = ttk.Scrollbar(frame_principal, orient="vertical", command=canvas.yview)
-        scrollbar_x = ttk.Scrollbar(frame_principal, orient="horizontal", command=canvas.xview)
-        scrollable_frame = ttk.Frame(canvas)
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-
-        # Adicionar os scrollbars
-        scrollbar_y.pack(side="right", fill="y")
-        scrollbar_x.pack(side="bottom", fill="x")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        # Entrada de Nome da Categoria
-        ttk.Label(scrollable_frame, text="Nome da Categoria:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        entrada_categoria = ttk.Entry(scrollable_frame, width=40)
+        # Entrada do nome da categoria
+        ttk.Label(janela_editar, text="Nome da Categoria:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        entrada_categoria = ttk.Entry(janela_editar, width=40)
         entrada_categoria.grid(row=0, column=1, columnspan=2, sticky="ew", padx=5, pady=5)
         entrada_categoria.insert(0, categoria)
 
-        # Scroll horizontal para Entry
-        self.adicionar_scroll_horizontal(entrada_categoria)
-
-
-        # Campos de Texto para PT e EN
-        ttk.Label(scrollable_frame, text="Textos em PT:").grid(row=1, column=0, sticky="nw", padx=5, pady=5)
-        texto_pt = tk.Text(scrollable_frame, height=10, width=40, wrap="none")
+        # Campos de texto para PT e EN (Removemos PT (EN))
+        ttk.Label(janela_editar, text="Textos em PT:").grid(row=1, column=0, sticky="nw", padx=5, pady=5)
+        texto_pt = tk.Text(janela_editar, height=10, width=30)
         texto_pt.grid(row=2, column=0, padx=5, pady=5, sticky="nsew")
 
-        ttk.Label(scrollable_frame, text="Textos em EN:").grid(row=1, column=1, sticky="nw", padx=5, pady=5)
-        texto_en = tk.Text(scrollable_frame, height=10, width=40, wrap="none")
+        ttk.Label(janela_editar, text="Textos em EN:").grid(row=1, column=1, sticky="nw", padx=5, pady=5)
+        texto_en = tk.Text(janela_editar, height=10, width=30)
         texto_en.grid(row=2, column=1, padx=5, pady=5, sticky="nsew")
 
-        # Scroll horizontal para os Text
-        self.adicionar_scroll_horizontal(texto_pt)
-        self.adicionar_scroll_horizontal(texto_en)
-
-        # Preencher os valores da categoria nas caixas de texto
-        for pt, en, _ in self.base_dados.get(categoria, []):
+        # Preencher os valores existentes diretamente da base de dados
+        for pt, en, _ in self.base_dados.get(categoria, []):  # Ignoramos a terceira entrada (PT (EN))
             texto_pt.insert("end", f"{pt}\n")
-            texto_en.insert("end", f"{en}\n")   
-
-        # Configuração do grid para expandir corretamente
-        scrollable_frame.grid_columnconfigure(0, weight=1)
-        scrollable_frame.grid_columnconfigure(1, weight=1)
-
+            texto_en.insert("end", f"{en}\n")
 
         def guardar_alteracoes():
             nova_categoria = entrada_categoria.get().strip()
-            if not nova_categoria:
-                tk.messagebox.showerror("Erro", "O nome da categoria não pode estar vazio.")
-                return
+            novos_textos_pt = texto_pt.get("1.0", "end-1c").strip().splitlines()
+            novos_textos_en = texto_en.get("1.0", "end-1c").strip().splitlines()
 
-            textos_pt = texto_pt.get("1.0", "end-1c").strip().splitlines()
-            textos_en = texto_en.get("1.0", "end-1c").strip().splitlines()
-
-            if len(textos_pt) != len(textos_en):
+            if len(novos_textos_pt) != len(novos_textos_en):
                 tk.messagebox.showerror("Erro", "O número de linhas em PT e EN deve ser igual.")
                 return
 
-            valores_existentes = set(map(tuple, self.base_dados.get(nova_categoria, [])))
-            novos_valores = set(zip(textos_pt, textos_en))
+            # Criar lista com apenas PT e EN, gerando PT (EN) automaticamente ao salvar
+            novos_valores = [[pt, en, f"{pt} ({en})"] for pt, en in zip(novos_textos_pt, novos_textos_en)]
 
-            # 🔹 Valida os termos antes de salvar
-            resultado_validacao = self.validar_valores_categoria(novos_valores, valores_existentes)
-            valores_unicos = resultado_validacao["valores_unicos"]
-
-            if not valores_unicos:
-                tk.messagebox.showinfo("Nenhum Conteúdo Válido", "Todos os valores foram ignorados por serem inválidos ou repetidos.")
-                return
-
-            # ✅ Atualizar a base de dados com os valores filtrados
-            self.base_dados[nova_categoria] = list(valores_existentes.union(valores_unicos))
-
-            # ✅ Renomeia a categoria caso tenha sido alterada
+            # Atualizar a base de dados
             if nova_categoria != categoria:
-                del self.base_dados[categoria]
+                del self.base_dados[categoria]  # Remove a antiga
+            self.base_dados[nova_categoria] = novos_valores
 
-            # ✅ Atualizar a interface
             self.recriar_interface_categorias()
             self.salvar_base_dados()
             janela_editar.destroy()
 
-        # Adicionar o botão "Salvar"
-        frame_botao = ttk.Frame(janela_editar)
-        frame_botao.pack(side="bottom", fill="x", padx=10, pady=10)
-
-        # Botão dentro do frame fixo no fundo da janela
-        ttk.Button(frame_botao, text="Guardar Alterações", command=guardar_alteracoes).pack(pady=5)
+        # Botão para salvar as alterações
+        ttk.Button(janela_editar, text="Guardar Alterações", command=guardar_alteracoes).grid(row=3, column=1, pady=10, sticky="e")
 
 
-        frame_principal.grid_rowconfigure(0, weight=1)
-        frame_principal.grid_columnconfigure(0, weight=1)
 
 
     def get_categoria_row(self, categoria):
@@ -865,44 +770,22 @@ class GTAptWindow:
 
 
     def salvar_base_dados(self):
-        """Salva a base de dados garantindo que todos os itens contenham (PT, EN, PT (EN))."""
+        """Garante que a base de dados seja salva corretamente no formato PT (EN)."""
         caminho = self.caminho_base_dados.get()
         
+        # Certifique-se de que a base de dados não está vazia antes de salvar
+        if not self.base_dados:
+            print("⚠️ Base de dados vazia! Nada será salvo.")
+            return
+        
         try:
-            # Verifica se o arquivo existe antes de carregar
-            if os.path.exists(caminho):
-                with open(caminho, "r", encoding="utf-8") as arquivo:
-                    conteudo_atual = json.load(arquivo)
-            else:
-                conteudo_atual = {}
-
-            # Atualiza garantindo que a estrutura de cada item seja (PT, EN, PT (EN))
-            base_dados_corrigido = {}
-            
-            for categoria, conteudo in self.base_dados.items():
-                novos_itens = []
-                for item in conteudo:
-                    if len(item) == 2:  # Caso faltem os 3 valores, gera automaticamente
-                        pt, en = item
-                        pt_en = f"{pt} ({en})"
-                        novos_itens.append([pt, en, pt_en])
-                    else:
-                        novos_itens.append(item)  # Mantém a estrutura se já estiver correta
-                
-                base_dados_corrigido[categoria] = novos_itens
-
-            # Se o conteúdo já for igual, não precisa reescrever
-            if conteudo_atual == base_dados_corrigido:
-                return
-
-            # Salva a base de dados corrigida
             with open(caminho, "w", encoding="utf-8") as arquivo:
-                json.dump(base_dados_corrigido, arquivo, indent=4, ensure_ascii=False)
-            
-            print("✅ Base de dados salva com sucesso!")
-
+                json.dump(self.base_dados, arquivo, indent=4, ensure_ascii=False)
+            print(f"✅ Base de dados salva com sucesso: {self.base_dados}")
         except Exception as e:
+            print(f"❌ Erro ao salvar a base de dados: {e}")
             messagebox.showerror("Erro", f"Erro ao salvar a base de dados: {e}")
+
 
 
 
@@ -1473,36 +1356,6 @@ class GTAptWindow:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def criar_abas(self):
         """ Cria as abas principais do notebook """
         self.notebook = ttk.Notebook(self.root)
@@ -1512,6 +1365,7 @@ class GTAptWindow:
         self.aba_evento_semanal = ttk.Frame(self.notebook)
         self.aba_missoes = ttk.Frame(self.notebook)
         self.aba_eventos_modo_livre = ttk.Frame(self.notebook)
+
 
         # Configuração das abas
         self.aba_evento_semanal.grid_columnconfigure(0, weight=1)
@@ -1523,15 +1377,28 @@ class GTAptWindow:
         """ Cria e adiciona as abas ao notebook """
         self.notebook.add(self.aba_evento_semanal, text="Evento Semanal")
         self.notebook.add(self.aba_missoes, text="Missões")
+        self.configurar_aba_missoes()
         self.notebook.add(self.aba_eventos_modo_livre, text="Eventos Modo Livre")
         self.carregar_imagem_topo()  # Chama a função para carregar a imagem no topo
+        
+
+
 
 
         # Configurações de "Disponível Brevemente" nas outras abas
-        self.label_missoes = ttk.Label(self.aba_missoes, text="Disponível Brevemente", font=("TkDefaultFont", 10, "bold"))
-        self.label_missoes.grid(row=0, column=0, pady=20, padx=20, sticky="n")
         self.label_eventos = ttk.Label(self.aba_eventos_modo_livre, text="Disponível Brevemente", font=("TkDefaultFont", 10, "bold"))
         self.label_eventos.grid(row=0, column=0, pady=20, padx=20, sticky="n")
+
+    
+    def monitorar_expansao(self):
+        """ Monitora mudanças no frame e ajusta a rolagem automaticamente """
+        self.tela.update_idletasks()
+        self.tela.configure(scrollregion=self.tela.bbox("all"))  # Ajusta a área de scroll
+
+        # Rechama a função automaticamente a cada 100ms
+        self.tela.after(100, self.monitorar_expansao) 
+
+
 
     def configurar_scroll(self):
         """Configuração da rolagem na aba de eventos semanais."""
@@ -1563,18 +1430,20 @@ class GTAptWindow:
             self.tela.itemconfig(self.window_id, width=nova_largura)
 
         self.tela.bind("<Configure>", _ajustar_largura)
+        self.monitorar_expansao()  
+
 
         # Atualiza a área de rolagem e impede scroll infinito
         def atualizar_scroll():
             self.tela.update_idletasks()  # Garante que o layout foi atualizado
             bbox = self.tela.bbox("all")
 
-            if bbox:
-                self.tela.configure(scrollregion=bbox)  # Atualiza a região de rolagem
+            if bbox and bbox[3] > self.tela.winfo_height():  
+                self.tela.configure(scrollregion=bbox)  # Permite scroll apenas se necessário
+            else:
+                self.tela.configure(scrollregion=(0, 0, bbox[2], self.tela.winfo_height()))  # Limita a rolagem
 
-        # Chamar a função sempre que a tela for redimensionada
-        self.root.bind("<Configure>", lambda e: atualizar_scroll())
-
+        self.frame_conteudo.bind("<Configure>", lambda e: atualizar_scroll())
 
         # Ajusta a rolagem do mouse corretamente no Windows (delta // 120)
         def _no_roda_rato(event):
@@ -1609,21 +1478,48 @@ class GTAptWindow:
         
     
     def adjust_height(self, event, widget):
-        """Ajusta a altura da caixa de texto para se ajustar ao conteúdo"""
-        # Verifica se o widget é uma caixa de texto (Text)
+        """Ajusta dinamicamente a altura da caixa de texto conforme o conteúdo e garante que as caixas em colunas 0 e 1 tenham alturas iguais."""
+        
         if isinstance(widget, tk.Text):
-            # Conta o número de linhas na caixa de texto
-            num_lines = int(widget.index('end-1c').split('.')[0])  # 'end-1c' para evitar o marcador de fim
-            
-            # Define uma altura mínima e máxima para a caixa de texto
+            widget.update_idletasks()  # Atualiza a interface antes de calcular a altura
+
+            # Obtém a quantidade de linhas visíveis
+            visible_lines = widget.count("1.0", "end", "displaylines")[0]
+
+            # Define os limites mínimos e máximos
             min_height = 1
-            max_height = 200  # Limite de linhas visíveis (pode ser ajustado conforme necessário)
-            
-            # Ajusta a altura baseada no número de linhas
-            new_height = min(max(min_height, num_lines), max_height)
-            
-            # Atualiza a altura da caixa de texto
-            widget.config(height=new_height)
+            max_height = 10  # Reduzido para evitar espaço morto excessivo
+
+            # Determina a nova altura com base no conteúdo
+            new_height = min(max(visible_lines, min_height), max_height)
+
+            # Obtém a linha e coluna da caixa de texto
+            row = widget.grid_info()["row"]
+            column = int(widget.grid_info()["column"])
+
+            # Aplica a nova altura à caixa de texto atual e à correspondente (se houver)
+            widget.configure(height=new_height)
+
+            try:
+                # Ajusta a caixa correspondente na outra coluna
+                corresponding_column = 1 if column == 0 else 0
+                corresponding_widget = self.frame_corridas_acrobaticas.grid_slaves(row=row, column=corresponding_column)[0]
+                corresponding_widget.configure(height=new_height)
+            except IndexError:
+                pass  # Caso não haja widget correspondente, ignora o erro
+
+            # Reconfigura o peso das linhas sem forçar uma altura fixa
+            self.frame_corridas_acrobaticas.grid_rowconfigure(row, weight=0)
+
+
+
+
+
+
+
+
+
+
             
     def adicionar_linha(self, event):
         """Adiciona uma única linha ao pressionar Shift + Enter."""
@@ -1688,9 +1584,6 @@ class GTAptWindow:
         # Atualiza a largura sempre que o frame mudar de tamanho
         self.frame_deslocavel.bind("<Configure>", _ajustar_largura_caixas)
         
-        for entrada in self.caixas_texto:
-            self.associar_botao_filtro(entrada)
-            self.aplicar_filtros(None, entrada)  # Aplica os filtros ao iniciar
 
 
 
@@ -1745,8 +1638,14 @@ class GTAptWindow:
         botao_expandir_conteudo_novo = ttk.Button(
             self.frame_deslocavel,
             text="Adicionar Categoria de Conteúdo Novo",
-            command=lambda: alternar_visibilidade(conteudo_novo_frame, botao_expandir_conteudo_novo)
+            command=lambda: alternar_visibilidade(
+                conteudo_novo_frame,
+                botao_expandir_conteudo_novo,
+                "Adicionar Categoria de Conteúdo Novo",
+                "Remover Categoria de Conteúdo Novo"
+            )
         )
+
         botao_expandir_conteudo_novo.grid(row=100, column=0, sticky="w", padx=10, pady=(20, 5))
         
         
@@ -1763,14 +1662,17 @@ class GTAptWindow:
 
 
         # Função para alternar visibilidade
-        def alternar_visibilidade(frame, botao):
-            """Alterna a visibilidade dos widgets na seção de Bónus de Atividade."""
+        def alternar_visibilidade(frame, botao, texto_expandir, texto_colapsar):
+            """Alterna a visibilidade de um frame e ajusta o texto do botão."""
             if frame.winfo_ismapped():
-                frame.grid_remove()  # Esconde o LabelFrame
-                botao.config(text="Adicionar Categoria de Conteúdo Novo")
+                frame.grid_remove()  # Esconde o frame
+                botao.config(text=texto_expandir)
             else:
-                frame.grid()  # Mostra o LabelFrame
-                botao.config(text="Remover Categoria de Conteúdo Novo")
+                frame.grid()  # Mostra o frame
+                botao.config(text=texto_colapsar)
+
+
+
 
         # Widgets dentro do conteudo_novo_frame
         # Label Título
@@ -1844,7 +1746,12 @@ class GTAptWindow:
         botao_expandir_novos_veiculos = ttk.Button(
             self.frame_deslocavel,
             text="Adicionar Categoria de Novos Veiculos Disponiveis",
-            command=lambda: alternar_visibilidade(novos_veiculos_frame, botao_expandir_novos_veiculos)
+            command=lambda: alternar_visibilidade(
+                novos_veiculos_frame,
+                botao_expandir_novos_veiculos,
+                "Adicionar Categoria de Novos Veiculos Disponiveis",
+                "Remover Categoria de Novos Veiculos Disponiveis"
+            )
         )
         botao_expandir_novos_veiculos.grid(row=102, column=0, sticky="w", padx=10, pady=(20, 5))
         
@@ -1995,12 +1902,17 @@ class GTAptWindow:
         
         
         #Prémios de Login ###################################################################
-        # Botão para expandir/colapsar
         botao_expandir_premios_login = ttk.Button(
             self.frame_deslocavel,
             text="Adicionar Categoria de Prémios de Login",
-            command=lambda: alternar_visibilidade(premios_login_frame, botao_expandir_premios_login)
+            command=lambda: alternar_visibilidade(
+                premios_login_frame,
+                botao_expandir_premios_login,
+                "Adicionar Categoria de Prémios de Login",
+                "Remover Categoria de Prémios de Login"
+            )
         )
+
         botao_expandir_premios_login.grid(row=104, column=0, sticky="w", padx=10, pady=(20, 5))
         
         
@@ -2094,8 +2006,15 @@ class GTAptWindow:
         botao_expandir_ret_conteudo = ttk.Button(
             self.frame_deslocavel,
             text="Adicionar Categoria de Retorno de Conteúdo",
-            command=lambda: alternar_visibilidade(ret_conteudo_frame, botao_expandir_ret_conteudo)
+            command=lambda: alternar_visibilidade(
+                ret_conteudo_frame,
+                botao_expandir_ret_conteudo,
+                "Adicionar Categoria de Retorno de Conteúdo",
+                "Remover Categoria de Retorno de Conteúdo"
+            )
         )
+
+
         botao_expandir_ret_conteudo.grid(row=106, column=0, sticky="w", padx=10, pady=(20, 5))
 
         # Frame expansível (LabelFrame) para "Retorno de Conteúdo"
@@ -2394,8 +2313,14 @@ class GTAptWindow:
         botao_expandir = ttk.Button(
             self.frame_deslocavel,
             text="Adicionar Bónus de Atividade",
-            command=lambda: alternar_visibilidade(bonus_atividade_frame, botao_expandir)
+            command=lambda: alternar_visibilidade(
+                bonus_atividade_frame,
+                botao_expandir,
+                "Adicionar Bónus de Atividade",
+                "Remover Bónus de Atividade"
+            )
         )
+
         botao_expandir.grid(row=300, column=0, sticky="w", padx=10, pady=(20, 5))
         
         
@@ -2410,14 +2335,15 @@ class GTAptWindow:
         bonus_atividade_frame.grid_remove() 
 
         # Função para alternar visibilidade
-        def alternar_visibilidade(frame, botao):
-            """Alterna a visibilidade dos widgets na seção de Bónus de Atividade."""
+        def alternar_visibilidade(frame, botao, texto_expandir, texto_colapsar):
+            """Alterna a visibilidade de um frame e ajusta o texto do botão."""
             if frame.winfo_ismapped():
-                frame.grid_remove()  # Esconde o LabelFrame
-                botao.config(text="Adicionar Bónus de Atividade")
+                frame.grid_remove()  # Esconde o frame
+                botao.config(text=texto_expandir)
             else:
-                frame.grid()  # Mostra o LabelFrame
-                botao.config(text="Remover Bónus de Atividade")
+                frame.grid()  # Mostra o frame
+                botao.config(text=texto_colapsar)
+
 
         # Widgets dentro do bonus_atividade_frame
         # Label Título
@@ -2670,28 +2596,31 @@ class GTAptWindow:
         self.associar_botao_filtro(self.entrada_descontos)
 
 
-        
-        # Gun Van ###################################################################
 
-        # Título da Van de Arsenal
+
+
+        # Gun Van ###################################################################
+        
         label_gunvan = ttk.Label(
             self.frame_deslocavel, 
             text="Van de Arsenal (Gun Van)", 
             font=("Arial", 16, "bold"), 
             foreground="blue"
         )
-        label_gunvan.grid(row=600, column=0, sticky="ew", padx=10, pady=(20, 10))
+        label_gunvan.grid(row=600, column=0, sticky="ew", padx=10, pady=(20, 10))      
 
-        # Título
-        label_lista_armas = ttk.Label(
+
+        # gunvan
+        # Titulo
+        label_gunvan= ttk.Label(
             self.frame_deslocavel, 
             text="Lista de Armas:", 
             font=("TkDefaultFont", 10, "bold")
         )
-        label_lista_armas.grid(row=601, column=0, sticky="ew", pady=5, padx=10)
+        label_gunvan.grid(row=601, column=0, sticky="ew", pady=5, padx=10)
 
         # Descrição
-        descricao_gunvan = ttk.Label(
+        descricao_gunvan= ttk.Label(
             self.frame_deslocavel, 
             text="Mete aqui a lista de armas da Gun Van", 
             font=("TkDefaultFont", 9), 
@@ -2707,82 +2636,11 @@ class GTAptWindow:
         self.entrada_gunvan.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
         self.entrada_gunvan.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_gunvan))
 
-        # Adiciona a entrada_gunvan na lista
-        self.caixas_texto.append(self.entrada_gunvan)
+        self.caixas_texto.append(self.entrada_descontos)
         self.associar_botao_filtro(self.entrada_gunvan)
 
-        # Botão de formatação (logo abaixo da descrição)
-        btn_formatar = ttk.Button(self.frame_deslocavel, text="Formatar", command=lambda: self.abrir_janela_formatar())
-        btn_formatar.grid(row=602, column=1, padx=10, pady=5, sticky="w")
 
-
-        # === Função para abrir a Janela de Formatação === #
-        def abrir_janela_formatar(self):
-            """Cria a janela de formatação sem bloquear os outros widgets"""
-            janela_formatar = Toplevel(self.frame_deslocavel)
-            janela_formatar.title("Formatar Lista de Armas")
-            janela_formatar.geometry("600x400")
-
-            # Caixa de texto para inserir/modificar o texto original (EDITÁVEL)
-            ttk.Label(janela_formatar, text="Texto Original:").pack(anchor="w", padx=10, pady=(10, 0))
-            entrada_original = tk.Text(janela_formatar, height=5, wrap="word")
-            entrada_original.pack(padx=10, pady=5, fill="both", expand=True)
-            entrada_original.insert("1.0", self.entrada_gunvan.get("1.0", tk.END).strip())
-
-            # Caixa de saída para exibir o texto formatado (NÃO EDITÁVEL)
-            ttk.Label(janela_formatar, text="Texto Formatado:").pack(anchor="w", padx=10, pady=(10, 0))
-
-            # Frame para conter a caixa de texto e a scrollbar horizontal
-            frame_saida = ttk.Frame(janela_formatar)
-            frame_saida.pack(fill="both", expand=True, padx=10, pady=5)
-
-            # Caixa de texto formatada com barra de rolagem horizontal
-            saida_formatada = tk.Text(frame_saida, height=10, wrap="none", state="disabled")
-            saida_formatada.pack(side="left", fill="both", expand=True)
-
-            # Adiciona a barra de rolagem horizontal
-            scrollbar_x = ttk.Scrollbar(frame_saida, orient="horizontal", command=saida_formatada.xview)
-            scrollbar_x.pack(side="bottom", fill="x")
-            saida_formatada.configure(xscrollcommand=scrollbar_x.set)
-
-            # === Função para formatar o texto === #
-            def formatar_texto():
-                texto_original = entrada_original.get("1.0", tk.END).strip()
-
-                if texto_original:
-                    # Divide os itens pelo separador " | " (com espaço antes e depois)
-                    itens_formatados = [item.strip() for item in texto_original.split(" | ")]
-
-                    # Junta os itens com uma quebra de linha
-                    texto_formatado = "\n".join(itens_formatados)
-
-                    saida_formatada.config(state="normal")
-                    saida_formatada.delete("1.0", tk.END)
-                    saida_formatada.insert(tk.END, texto_formatado)
-                    saida_formatada.config(state="disabled")
-
-                    # Ajusta a largura da caixa de texto dinamicamente
-                    max_largura = max(len(linha) for linha in itens_formatados)  # Maior linha
-                    saida_formatada.config(width=max_largura)
-
-            # === Botão "Formatar" === #
-            btn_formatar = ttk.Button(janela_formatar, text="Formatar", command=formatar_texto)
-            btn_formatar.pack(pady=5)
-
-            # === Botão "Copiar Texto" === #
-            def copiar_texto():
-                texto_formatado = saida_formatada.get("1.0", tk.END).strip()
-                janela_formatar.clipboard_clear()
-                janela_formatar.clipboard_append(texto_formatado)
-                janela_formatar.update()
-
-            btn_copiar = ttk.Button(janela_formatar, text="Copiar Texto", command=copiar_texto)
-            btn_copiar.pack(pady=5)
-
-
-        # Adiciona a função à classe
-        self.abrir_janela_formatar = abrir_janela_formatar.__get__(self)
-
+    
     
     
     # Roubos do Ferro-Velho (Salvage Yard Robberies) ###################################################################
@@ -3656,6 +3514,615 @@ class GTAptWindow:
         
         
         
+        
+        
+        #################################################################################################################################################################
+        ######################################################################### ABA Missoes ###########################################################################
+        #################################################################################################################################################################
+        
+        
+    def configurar_aba_missoes(self):
+        """Configura a aba Missões com estrutura organizada e responsiva."""
+
+        # Criar estrutura de scroll
+        self.tela_missoes = tk.Canvas(self.aba_missoes)
+        self.barra_deslocamento_missoes = ttk.Scrollbar(self.aba_missoes, orient="vertical", command=self.tela_missoes.yview)
+
+        self.frame_missoes = ttk.Frame(self.tela_missoes)
+        self.window_id_missoes = self.tela_missoes.create_window((0, 0), window=self.frame_missoes, anchor="nw")
+
+        self.tela_missoes.configure(yscrollcommand=self.barra_deslocamento_missoes.set)
+
+        self.tela_missoes.grid(row=0, column=0, sticky="nsew")
+        self.barra_deslocamento_missoes.grid(row=0, column=1, sticky="ns")
+
+        self.aba_missoes.grid_columnconfigure(0, weight=1)
+        self.aba_missoes.grid_rowconfigure(0, weight=1)
+
+        self.frame_missoes.grid_columnconfigure(0, weight=1)
+
+        # Ajustar rolagem ao conteúdo
+        def ajustar_scroll_missoes():
+            self.tela_missoes.update_idletasks()
+            bbox = self.tela_missoes.bbox("all")
+            if bbox:
+                self.tela_missoes.configure(scrollregion=bbox)
+
+        self.frame_missoes.bind("<Configure>", lambda e: ajustar_scroll_missoes())
+
+        # Garantir que os frames colapsáveis sempre ocupem toda a largura
+        self.aba_missoes.bind("<Configure>", self.ajustar_largura_missoes)
+
+        # Adicionar suporte à rolagem do mouse
+        def rolagem_mouse(event):
+            """Permite a rolagem da tela com a roda do mouse apenas se a janela estiver em foco."""
+            if self.root.focus_displayof():
+                self.tela_missoes.yview_scroll(-1 * (event.delta // 120), "units")
+
+        def habilitar_scroll(event):
+            """Ativa a rolagem com a roda do mouse."""
+            self.root.bind_all("<MouseWheel>", rolagem_mouse)
+
+        def desabilitar_scroll(event):
+            """Desativa a rolagem com a roda do mouse quando o cursor sai da janela."""
+            self.root.unbind_all("<MouseWheel>")
+
+        self.tela_missoes.bind("<Enter>", habilitar_scroll)
+        self.tela_missoes.bind("<Leave>", desabilitar_scroll)
+
+        # Adicionar título principal
+        ttk.Label(self.frame_missoes, text="Missões da Semana", font=("TkDefaultFont", 12, "bold")).grid(
+            row=0, column=0, pady=10, padx=10, sticky="w"
+        )
+
+        # Criar frames colapsáveis
+        self.criar_frame_corridas_acrobaticas(1)
+        self.criar_frame_missoes_especiais(3)
+        self.criar_frame_modo_adeversario(5)
+
+        # Criar botão "Gerar BBCode Missões"
+        self.frame_botao_missoes = ttk.Frame(self.aba_missoes)
+        self.frame_botao_missoes.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+
+        self.botao_gerar_bbcode_missoes = ttk.Button(self.frame_botao_missoes, text="Gerar BBCode Missões", command=self.gerar_bbcode_missoes)
+        self.botao_gerar_bbcode_missoes.pack(expand=True)
+
+        # Ajustar layout para manter o botão fixo no fundo
+        self.aba_missoes.grid_rowconfigure(1, weight=0)
+
+
+        
+    def ajustar_largura_missoes(self, event=None):
+        """Ajusta a largura dos frames colapsáveis para ocupar a largura da aba menos 50 pixels."""
+        largura_total = self.aba_missoes.winfo_width()
+        nova_largura = max(largura_total - 50, 300)  # Garante um mínimo de 300px
+
+        self.tela_missoes.itemconfig(self.window_id_missoes, width=nova_largura)
+
+        for widget in self.frame_missoes.winfo_children():
+            widget.config(width=nova_largura)  # Aplica a nova largura aos frames internos
+
+
+
+
+        
+        
+        
+    def criar_frame_corridas_acrobaticas(self, linha):
+        """Cria o frame colapsável para Corridas Acrobáticas."""
+
+        # Botão para expandir/colapsar
+        self.botao_expandir_corridas_acrobaticas = ttk.Button(self.frame_missoes, text="Corridas Acrobáticas ▼", command=self.alternar_corridas_acrobaticas)
+        self.botao_expandir_corridas_acrobaticas.grid(row=linha, column=0, sticky="ew", padx=10, pady=5)
+
+        # Frame colapsável
+        self.frame_corridas_acrobaticas = ttk.Frame(self.frame_missoes, relief="ridge", borderwidth=2)
+        self.frame_corridas_acrobaticas.grid(row=linha+1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self.frame_corridas_acrobaticas.grid_remove()
+
+        self.frame_missoes.grid_columnconfigure(0, weight=1)
+        
+        # Configurar as colunas para ocupar 50% cada
+        self.frame_corridas_acrobaticas.grid_columnconfigure(0, weight=1, uniform="grupo")
+        self.frame_corridas_acrobaticas.grid_columnconfigure(1, weight=1, uniform="grupo")
+
+        
+        
+        # Widget URL
+        self.label_corridas_acrobaticas_url = ttk.Label(self.frame_corridas_acrobaticas, text="URL da imagem ou vídeo de Capa:", font=("TkDefaultFont", 10, "bold"))
+        self.label_corridas_acrobaticas_url.grid(row=1, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_url = ttk.Label(self.frame_corridas_acrobaticas, text="Coloca o link da imagem ou vídeo que irá servir de capa para as corridas acrobáticas.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_url.grid(row=2, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        self.entrada_corridas_acrobaticas_url = ttk.Entry(self.frame_corridas_acrobaticas)
+        self.entrada_corridas_acrobaticas_url.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        self.entrada_corridas_acrobaticas_url.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_url.bind('<Return>', self.proximo_campo_sem_nova_linha)
+        self.entrada_corridas_acrobaticas_url.bind("<KeyRelease>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_url.bind("<Tab>", self.proximo_campo_com_tab)
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_url)
+
+        # Widget Descrição PT
+        self.label_corridas_acrobaticas_descricao_pt = ttk.Label(self.frame_corridas_acrobaticas, text="Descrição PT:", font=("TkDefaultFont", 10, "bold"))
+        self.label_corridas_acrobaticas_descricao_pt.grid(row=4, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_pt = ttk.Label(self.frame_corridas_acrobaticas, text="Coloca a descrição em português.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_pt.grid(row=5, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        self.entrada_corridas_acrobaticas_pt = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_pt.grid(row=6, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
+        self.entrada_corridas_acrobaticas_pt.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_pt.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_pt.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_pt.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_pt))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_pt)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_pt)
+
+        # Widget Descrição EN
+        self.label_corridas_acrobaticas_descricao_en = ttk.Label(self.frame_corridas_acrobaticas, text="Descrição EN:", font=("TkDefaultFont", 10, "bold"))
+        self.label_corridas_acrobaticas_descricao_en.grid(row=7, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_en = ttk.Label(self.frame_corridas_acrobaticas, text="Introduza a descrição em inglês.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_en.grid(row=8, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        self.entrada_corridas_acrobaticas_en = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_en.grid(row=9, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
+        self.entrada_corridas_acrobaticas_en.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_en.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_en.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_en.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_en))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_en)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_en)
+
+        # Widget "Para"
+        self.label_corridas_acrobaticas_para = ttk.Label(self.frame_corridas_acrobaticas, text="Para:", font=("TkDefaultFont", 9, "bold"))
+        self.label_corridas_acrobaticas_para.grid(row=10, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_para = ttk.Label(self.frame_corridas_acrobaticas, text="Número de jogadores.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_para.grid(row=11, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        self.entrada_corridas_acrobaticas_para = ttk.Entry(self.frame_corridas_acrobaticas)
+        self.entrada_corridas_acrobaticas_para.grid(row=12, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+
+        # Widget "Local"
+        self.label_corridas_acrobaticas_local = ttk.Label(self.frame_corridas_acrobaticas, text="Local:", font=("TkDefaultFont", 9, "bold"))
+        self.label_corridas_acrobaticas_local.grid(row=13, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_local = ttk.Label(self.frame_corridas_acrobaticas, text="Localização do evento.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_local.grid(row=14, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        # Checkbutton "Todo o Mapa"
+        self.var_corridas_acrobaticas_todo_mapa = tk.BooleanVar()
+        self.check_corridas_acrobaticas_todo_mapa = ttk.Checkbutton(
+            self.frame_corridas_acrobaticas,
+            text="Todo o Mapa",
+            variable=self.var_corridas_acrobaticas_todo_mapa,
+            command=lambda: self.preencher_entrada_se_marcado(self.var_corridas_acrobaticas_todo_mapa, self.entrada_corridas_acrobaticas_local, "Todo o Mapa")
+        )
+        self.check_corridas_acrobaticas_todo_mapa.grid(row=15, column=0, sticky="w", padx=10, pady=2)
+
+        self.entrada_corridas_acrobaticas_local = ttk.Entry(self.frame_corridas_acrobaticas)
+        self.entrada_corridas_acrobaticas_local.grid(row=16, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_local)
+
+        # Widget "Frequência"
+        
+        self.label_corridas_acrobaticas_frequencia = ttk.Label(self.frame_corridas_acrobaticas, text="Frequência:", font=("TkDefaultFont", 9, "bold"))
+        self.label_corridas_acrobaticas_frequencia.grid(row=17, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_frequencia = ttk.Label(self.frame_corridas_acrobaticas, text="Frequência do evento.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_frequencia.grid(row=18, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        # CheckButton "Frequência"
+        self.var_corridas_acrobaticas_frequencia_permanente = tk.BooleanVar()
+        check_corridas_acrobaticas_frequencia_permanente = ttk.Checkbutton(
+            self.frame_corridas_acrobaticas,
+            text="Permanente",
+            variable=self.var_corridas_acrobaticas_frequencia_permanente
+        )
+        check_corridas_acrobaticas_frequencia_permanente.grid(row=19, column=0, sticky="w", padx=10, pady=5)
+
+        self.var_corridas_acrobaticas_frequencia_semana_evento = tk.BooleanVar()
+        check_corridas_acrobaticas_frequencia_semana_evento = ttk.Checkbutton(
+            self.frame_corridas_acrobaticas,
+            text="Permanente durante a Semana do Evento",
+            variable=self.var_corridas_acrobaticas_frequencia_semana_evento
+        )
+        check_corridas_acrobaticas_frequencia_semana_evento.grid(row=20, column=0, sticky="w", padx=10, pady=5)
+
+
+        self.entrada_corridas_acrobaticas_frequencia = ttk.Entry(self.frame_corridas_acrobaticas)
+        self.entrada_corridas_acrobaticas_frequencia.grid(row=21, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+
+        # Widget "Voltas"
+        self.label_corridas_acrobaticas_voltas = ttk.Label(self.frame_corridas_acrobaticas, text="Voltas:", font=("TkDefaultFont", 9, "bold"))
+        self.label_corridas_acrobaticas_voltas.grid(row=22, column=0, sticky="w", pady=5, padx=10)
+
+        self.descricao_corridas_acrobaticas_voltas = ttk.Label(self.frame_corridas_acrobaticas, text="Número de voltas.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_voltas.grid(row=23, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        self.entrada_corridas_acrobaticas_numero_voltas = ttk.Entry(self.frame_corridas_acrobaticas)
+        self.entrada_corridas_acrobaticas_numero_voltas.grid(row=24, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+
+        self.descricao_corridas_acrobaticas_voltas_padrao = ttk.Label(self.frame_corridas_acrobaticas, text="Número padrão de voltas.", font=("TkDefaultFont", 9), foreground="gray")
+        self.descricao_corridas_acrobaticas_voltas_padrao.grid(row=25, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        self.entrada_corridas_acrobaticas_numero_padrao_voltas = ttk.Entry(self.frame_corridas_acrobaticas)
+        self.entrada_corridas_acrobaticas_numero_padrao_voltas.grid(row=26, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+
+
+        # Widget Como Funciona
+        label_corridas_acrobaticas_como_funciona = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Como Funciona:",
+            font=("TkDefaultFont", 10, "bold")
+        )
+        label_corridas_acrobaticas_como_funciona.grid(row=27, column=0, sticky="w", pady=5, padx=10)
+
+        # Descrição Como Funciona
+        descricao_corridas_acrobaticas_como_funciona = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Explique como funciona esta atividade.",
+            font=("TkDefaultFont", 9),
+            foreground="gray"
+        )
+        descricao_corridas_acrobaticas_como_funciona.grid(row=28, column=0, sticky="w", padx=10, pady=(0, 5))
+
+        # CheckButton "Adicionar Caminho menu pausa 'Corridas Acrobáticas'"
+        self.var_corridas_acrobaticas_como_funciona_menu_pausa = tk.BooleanVar()
+        check_corridas_acrobaticas_como_funciona_menu_pausa = ttk.Checkbutton(
+            self.frame_corridas_acrobaticas,
+            text="Adicionar Caminho menu pausa 'Corridas Acrobáticas'",
+            variable=self.var_corridas_acrobaticas_como_funciona_menu_pausa
+        )
+        check_corridas_acrobaticas_como_funciona_menu_pausa.grid(row=29, column=0, sticky="w", padx=10, pady=5)
+
+        # CheckButton "Adicionar Caminho Telefone 'Corridas Acrobáticas'"
+        self.var_corridas_acrobaticas_como_funciona_tel = tk.BooleanVar()
+        check_corridas_acrobaticas_como_funciona_tel = ttk.Checkbutton(
+            self.frame_corridas_acrobaticas,
+            text="Adicionar Caminho Telefone 'Corridas Acrobáticas'",
+            variable=self.var_corridas_acrobaticas_como_funciona_tel
+        )
+        check_corridas_acrobaticas_como_funciona_tel.grid(row=29, column=1, sticky="w", padx=10, pady=5)
+
+
+        # Caixa de texto Como Funciona
+        self.entrada_corridas_acrobaticas_como_funciona = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_como_funciona.grid(row=30, column=0, padx=10, pady=5, sticky="nsew", columnspan=2)
+        self.entrada_corridas_acrobaticas_como_funciona.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_como_funciona.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_como_funciona.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_como_funciona.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_como_funciona))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_como_funciona)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_como_funciona)
+
+        # Widget Veículos
+        label_corridas_acrobaticas_veiculos = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Veículos:",
+            font=("TkDefaultFont", 11, "bold"),  # Maior destaque,
+            foreground="red"
+        )
+        label_corridas_acrobaticas_veiculos.grid(row=33, column=0, sticky="w", pady=(20,5), padx=10, columnspan=2)
+
+        # Título Nome do Veículo
+        label_corridas_acrobaticas_nome_veiculo = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Nome do Veículo:"
+        )
+        label_corridas_acrobaticas_nome_veiculo.grid(row=34, column=0, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Nome do Veículo
+        self.entrada_corridas_acrobaticas_nome_veiculo = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_nome_veiculo.grid(row=35, column=0, padx=(10, 0), pady=1, sticky="ew")
+        self.entrada_corridas_acrobaticas_nome_veiculo.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_nome_veiculo.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_nome_veiculo.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_nome_veiculo.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_nome_veiculo))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_nome_veiculo)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_nome_veiculo)
+
+        # Título Imagem do Veículo
+        label_corridas_acrobaticas_imagem_veiculo = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Imagem do Veículo:"
+        )
+        label_corridas_acrobaticas_imagem_veiculo.grid(row=34, column=1, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Imagem do Veículo
+        self.entrada_corridas_acrobaticas_imagem_veiculo = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_imagem_veiculo.grid(row=35, column=1, padx=(25, 1), pady=5, sticky="ew")
+        self.entrada_corridas_acrobaticas_imagem_veiculo.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_imagem_veiculo.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_imagem_veiculo.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_imagem_veiculo.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_imagem_veiculo))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_imagem_veiculo)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_imagem_veiculo)
+
+        # Widget Corridas
+        label_corridas_acrobaticas_corridas = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Corridas:",
+            font=("TkDefaultFont", 11, "bold"),  # Maior destaque
+            foreground="red"
+        )
+        label_corridas_acrobaticas_corridas.grid(row=36, column=0, sticky="w", pady=(20,5), padx=10, columnspan=2)
+
+
+        # Título Lista de Corridas
+        label_corridas_acrobaticas_lista_corridas = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Lista de Corridas:"
+        )
+        label_corridas_acrobaticas_lista_corridas.grid(row=37, column=0, sticky="w", padx=10, pady=(5, 0), columnspan=2)
+
+        # Caixa Lista de Corridas
+        self.entrada_corridas_acrobaticas_lista_corridas = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_lista_corridas.grid(row=38, column=0, padx=(10, 0), pady=5, sticky="ew", columnspan=2)
+        self.entrada_corridas_acrobaticas_lista_corridas.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_lista_corridas.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_lista_corridas.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_lista_corridas.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_lista_corridas))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_lista_corridas)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_lista_corridas)
+
+        # Título Nome da Corrida
+        label_corridas_acrobaticas_nome_corrida = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Nome da Corrida:"
+        )
+        label_corridas_acrobaticas_nome_corrida.grid(row=39, column=0, sticky="w", padx=10, pady=(5, 0), columnspan=2)
+
+        # Caixa Nome da Corrida
+        self.entrada_corridas_acrobaticas_nome_corrida = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_nome_corrida.grid(row=40, column=0, padx=(10, 0), pady=5, sticky="ew", columnspan=2)
+        self.entrada_corridas_acrobaticas_nome_corrida.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_nome_corrida.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_nome_corrida.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_nome_corrida.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_nome_corrida))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_nome_corrida)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_nome_corrida)
+
+        # Título Descrição da Corrida PT
+        label_corridas_acrobaticas_descricao_pt = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Descrição da Corrida PT:"
+        )
+        label_corridas_acrobaticas_descricao_pt.grid(row=41, column=0, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Descrição da Corrida PT
+        self.entrada_corridas_acrobaticas_descricao_pt = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_descricao_pt.grid(row=42, column=0, padx=(10, 0), pady=5, sticky="nsew")
+        self.entrada_corridas_acrobaticas_descricao_pt.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_descricao_pt.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_descricao_pt.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_descricao_pt.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_descricao_pt))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_descricao_pt)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_descricao_pt)
+
+        # Título Descrição da Corrida EN
+        label_corridas_acrobaticas_descricao_en = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Descrição da Corrida EN:"
+        )
+        label_corridas_acrobaticas_descricao_en.grid(row=41, column=1, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Descrição da Corrida EN
+        self.entrada_corridas_acrobaticas_descricao_en = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_descricao_en.grid(row=42, column=1, padx=(25, 1), pady=5, sticky="nsew")
+        self.entrada_corridas_acrobaticas_descricao_en.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_descricao_en.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_descricao_en.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_descricao_en.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_descricao_en))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_descricao_en)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_descricao_en)
+
+        # Título Imagem da Corrida
+        label_corridas_acrobaticas_imagem_corrida = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Imagem da Corrida:"
+        )
+        label_corridas_acrobaticas_imagem_corrida.grid(row=43, column=0, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Imagem da Corrida
+        self.entrada_corridas_acrobaticas_imagem_corrida = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_imagem_corrida.grid(row=44, column=0, padx=(10, 0), pady=5, sticky="ew")
+        self.entrada_corridas_acrobaticas_imagem_corrida.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_imagem_corrida.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_imagem_corrida.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_imagem_corrida.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_imagem_corrida))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_imagem_corrida)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_imagem_corrida)
+
+        # Título Imagem do Mapa da Corrida
+        label_corridas_acrobaticas_imagem_mapa_corrida = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Imagem do Mapa da Corrida:"
+        )
+        label_corridas_acrobaticas_imagem_mapa_corrida.grid(row=43, column=1, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Imagem do Mapa da Corrida
+        self.entrada_corridas_acrobaticas_imagem_mapa_corrida = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_imagem_mapa_corrida.grid(row=44, column=1, padx=(25, 1), pady=5, sticky="ew")
+        self.entrada_corridas_acrobaticas_imagem_mapa_corrida.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_imagem_mapa_corrida.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_imagem_mapa_corrida.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_imagem_mapa_corrida.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_imagem_mapa_corrida))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_imagem_mapa_corrida)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_imagem_mapa_corrida)
+        
+        
+        # Widget Dicas
+        label_corridas_acrobaticas_dicas = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Dicas:",
+            font=("TkDefaultFont", 11, "bold"),  # Maior destaque
+            foreground="red"
+        )
+        label_corridas_acrobaticas_dicas.grid(row=45, column=0, sticky="w", pady=(20, 5), padx=10, columnspan=2)
+
+        # Título Descrição da Dica
+        label_corridas_acrobaticas_descricao_dicas = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Descrição das Dicas:"
+        )
+        label_corridas_acrobaticas_descricao_dicas.grid(row=46, column=0, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Descrição da Dica
+        self.entrada_corridas_acrobaticas_descricao_dicas = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_descricao_dicas.grid(row=47, column=0, padx=(10, 0), pady=5, sticky="nsew", columnspan=2)
+        self.entrada_corridas_acrobaticas_descricao_dicas.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_descricao_dicas.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_descricao_dicas.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_descricao_dicas.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_descricao_dicas))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_descricao_dicas)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_descricao_dicas)
+
+        # Widget Vídeo de Guia
+        label_corridas_acrobaticas_video_guia = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Vídeo de Guia:",
+            font=("TkDefaultFont", 11, "bold"),  # Maior destaque
+            foreground="red"
+        )
+        label_corridas_acrobaticas_video_guia.grid(row=48, column=0, sticky="w", pady=(20, 5), padx=10, columnspan=2)
+
+        # Título Descrição do Vídeo de Guia
+        label_corridas_acrobaticas_descricao_video_guia = ttk.Label(
+            self.frame_corridas_acrobaticas,
+            text="Descrição do Vídeo de Guia:"
+        )
+        label_corridas_acrobaticas_descricao_video_guia.grid(row=49, column=0, sticky="w", padx=10, pady=(5, 0))
+
+        # Caixa Descrição do Vídeo de Guia
+        self.entrada_corridas_acrobaticas_descricao_video_guia = tk.Text(self.frame_corridas_acrobaticas, height=1, wrap=tk.WORD)
+        self.entrada_corridas_acrobaticas_descricao_video_guia.grid(row=50, column=0, padx=(10, 0), pady=5, sticky="nsew", columnspan=2)
+        self.entrada_corridas_acrobaticas_descricao_video_guia.bind("<FocusIn>", self.scroll_para_cursor)
+        self.entrada_corridas_acrobaticas_descricao_video_guia.bind("<Shift-Return>", self.shift_return_handler)
+        self.entrada_corridas_acrobaticas_descricao_video_guia.bind("<Return>", lambda event: self.proximo_campo_sem_nova_linha(event))
+        self.entrada_corridas_acrobaticas_descricao_video_guia.bind("<KeyRelease>", lambda event: self.adjust_height(event, self.entrada_corridas_acrobaticas_descricao_video_guia))
+        self.caixas_texto.append(self.entrada_corridas_acrobaticas_descricao_video_guia)
+        self.associar_botao_filtro(self.entrada_corridas_acrobaticas_descricao_video_guia)
+
+
+
+
+
+
+
+
+                
+
+    def alternar_corridas_acrobaticas(self):
+        """Expande ou colapsa o frame de Corridas Acrobáticas."""
+        if self.frame_corridas_acrobaticas.winfo_ismapped():
+            self.frame_corridas_acrobaticas.grid_remove()
+            self.botao_expandir_corridas_acrobaticas.config(text="Corridas Acrobáticas ▼") 
+        else:
+            self.frame_corridas_acrobaticas.grid()
+            self.botao_expandir_corridas_acrobaticas.config(text="Corridas Acrobáticas ▲") 
+
+
+
+
+
+
+    ### FRAME: MISSÕES ESPECIAIS ###
+    def criar_frame_missoes_especiais(self, linha):
+        """Cria o frame colapsável para Missões Especiais."""
+
+        self.botao_expandir_missoes = ttk.Button(self.frame_missoes, text="Missões Especiais ▼", command=self.alternar_missoes_especiais)
+        self.botao_expandir_missoes.grid(row=linha, column=0, sticky="ew", padx=10, pady=5)
+
+        self.frame_missoes_especiais = ttk.Frame(self.frame_missoes, relief="ridge", borderwidth=2)
+        self.frame_missoes_especiais.grid(row=linha+1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self.frame_missoes_especiais.grid_remove()
+
+        self.frame_missoes.grid_columnconfigure(0, weight=1)
+        self.frame_missoes_especiais.grid_columnconfigure(0, weight=1)
+
+        ttk.Label(self.frame_missoes_especiais, text="Detalhes das Missões Especiais", font=("TkDefaultFont", 10, "bold")).grid(
+            row=0, column=0, pady=5, padx=10, sticky="w"
+        )
+
+        self.entrada_missoes = tk.Text(self.frame_missoes_especiais, height=5, wrap="word")
+        self.entrada_missoes.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+    def alternar_missoes_especiais(self):
+        """Expande ou colapsa o frame de Missões Especiais."""
+        if self.frame_missoes_especiais.winfo_ismapped():
+            self.frame_missoes_especiais.grid_remove()
+            self.botao_expandir_missoes.config(text="Missões Especiais ▼")
+        else:
+            self.frame_missoes_especiais.grid()
+            self.botao_expandir_missoes.config(text="Missões Especiais ▲")
+
+
+        
+        
+        ## FRAME: MISSÕES ESPECIAIS ###
+    def criar_frame_modo_adeversario(self, linha):
+        """Cria o frame colapsável para Modo Adversário."""
+
+        self.botao_expandir_modo = ttk.Button(self.frame_missoes, text="Modo Adversário ▼", command=self.alternar_modo_adeversario)
+        self.botao_expandir_modo.grid(row=linha, column=0, sticky="ew", padx=10, pady=5)
+
+        self.frame_modo_adeversario = ttk.Frame(self.frame_missoes, relief="ridge", borderwidth=2)
+        self.frame_modo_adeversario.grid(row=linha+1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self.frame_modo_adeversario.grid_remove()
+
+        self.frame_missoes.grid_columnconfigure(0, weight=1)
+        self.frame_modo_adeversario.grid_columnconfigure(0, weight=1)
+
+        ttk.Label(self.frame_modo_adeversario, text="Modo Adversário", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, pady=5, padx=10, sticky="w")
+
+        self.entrada_modo = tk.Text(self.frame_modo_adeversario, height=5, wrap="word")
+        self.entrada_modo.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+    def alternar_modo_adeversario(self):
+        """Expande ou colapsa o frame de Missões Especiais."""
+        if self.frame_modo_adeversario.winfo_viewable():
+            self.frame_modo_adeversario.grid_remove()
+            self.botao_expandir_missoes.config(text="Missões Especiais ▼")
+        else:
+            self.frame_modo_adeversario.grid()
+            self.botao_expandir_missoes.config(text="Missões Especiais ▲")
+
+
+    def abrir_preview_bbcode_missoes(self, bbcode):
+        """Abre uma janela de preview para exibir o BBCode."""
+        preview_window = tk.Toplevel(self.root)
+        preview_window.title("Preview BBCode")
+        preview_window.geometry("600x400")
+
+        # Área de texto para o preview
+        preview_text = tk.Text(preview_window, wrap=tk.WORD)
+        preview_text.insert(tk.END, bbcode)  # Insere o BBCode gerado no campo de texto
+        preview_text.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+
+        # Função para selecionar todo o código e copiar para a área de transferência
+        def select_and_copy():
+            preview_text.tag_add("sel", "1.0", "end")  # Seleciona todo o texto
+            preview_text.clipboard_clear()  # Limpa a área de transferência
+            preview_text.clipboard_append(preview_text.get('1.0', 'end-1c'))  # Copia o texto
+            preview_text.update()  # Atualiza a área de transferência
+
+        # Criar o botão "Copiar o BBCode"
+        select_button = tk.Button(preview_window, text="Copiar o BBCode", command=select_and_copy)
+        select_button.grid(row=1, column=0, pady=10)
+
+        # Configuração para fazer o layout responsivo
+        preview_window.grid_rowconfigure(0, weight=1)  # O texto vai se expandir
+        preview_window.grid_columnconfigure(0, weight=1)  # O texto vai se expandir
+
+
+
+
+        
+        
+        
         ########################################################### BBCODE ##########################################################
         
     #Janela Preview
@@ -3731,9 +4198,6 @@ class GTAptWindow:
         else:
             # Se não houver conteúdo nem imagens, não adicionar nada
             pass
-
-
-
         
         
         
@@ -4198,55 +4662,47 @@ class GTAptWindow:
         # Obter o conteúdo da caixa de texto da Gun Van
         gun_van_texto = self.entrada_gunvan.get("1.0", "end-1c").strip()
 
-        # Verificar se a caixa de texto da Gun Van não está vazia antes de adicionar o BBCode
-        if gun_van_texto:  
+        # Verificar se a caixa de texto da Gun Van não está vazia antes de adicionar o bbcode
+        if gun_van_texto:  # Se houver algo na caixa de texto
             # Adicionar o título da categoria de Gun Van
             conteudo += "\n\n\n\n"
             conteudo += f"[b][size=150][color=#0073e6]{categoria_gun_van}:[/color][/size][/b]\n"
             conteudo += "[hr][/hr]\n"
             conteudo += f"[img]https://rockstarintel.com/wp-content/uploads/2023/01/b6b37e2ae693cdff8f2feb234b44b76948b1529b-scaled.jpg[/img]\n"
 
-            # 🔹 Função para ajustar os descontos e traduções corretamente (PT e EN)
+            # Função para ajustar o texto das porcentagens e outras substituições
             def ajustar_percentagem(texto):
-                # Corrigir porcentagens em inglês e português
-                texto = re.sub(r"(\d+)%\s*off", r"\1%", texto)  # "50% off" → "50%"
-                texto = re.sub(r"(\d+)%\s*de desconto", r"\1%", texto)  # "50% de desconto" → "50%"
-                
-                # Ajustar GTA+ em inglês e português
-                texto = re.sub(r"(\d+)%\s*for GTA\+ Members", r"\1% GTA+", texto)  # "50% for GTA+ Members" → "50% GTA+"
-                texto = re.sub(r"(\d+)%\s*para membros do GTA\+", r"\1% GTA+", texto)  # "50% para membros do GTA+" → "50% GTA+"
-                
-                # Ajustar "free" para GTA+ em ambos idiomas
-                texto = re.sub(r"free for GTA\+ Members", "Gratis GTA+", texto)  # "free for GTA+ Members" → "Gratis GTA+"
-                texto = re.sub(r"grátis para membros do GTA\+", "Gratis GTA+", texto)  # "grátis para membros do GTA+" → "Gratis GTA+"
-                
-                # Ajustar a exclusividade do PS5 e Xbox Series X|S
-                texto = re.sub(r"PS5 and Xbox Series X\|S only", "Exclusivo PS5 e Xbox Series X|S", texto)  # EN → PT
-                texto = re.sub(r"apenas para PS5 e Xbox Series X\|S", "Exclusivo PS5 e Xbox Series X|S", texto)  # PT → PT formatado
-                
+                # Ajusta "x% off" para "x%" (sem parênteses extras)
+                texto = re.sub(r"(\d+)%\s*off", r"\1%", texto)
+                # Ajusta "x% for GTA+ Members" para "x% GTA+" (sem parênteses extras)
+                texto = re.sub(r"(\d+)%\s*for GTA\+ Members", r"\1% GTA+", texto)
+                # Ajusta "free for GTA+ Members" para "Gratis GTA+" (sem parênteses extras)
+                texto = re.sub(r"free for GTA\+ Members", "Gratis GTA+", texto)
+                # Ajusta "PS5 and Xbox Series X|S only" para "Exclusivo PS5 e Xbox Series X|S"
+                texto = re.sub(r"PS5 and Xbox Series X\|S only", "Exclusivo PS5 e Xbox Series X|S", texto)
                 return texto
 
-            # 🔹 Separar os itens corretamente e formatar tudo antes de entrar no BBCode
+            # Verificar se o texto foi introduzido de forma estruturada com " | "
             if " | " in gun_van_texto:
-                gun_van_itens = gun_van_texto.split(" | ")  # Separar pelos " | " (com espaço antes e depois)
+                # Separar a entrada usando o separador " | " com espaços antes e depois
+                gun_van_itens = [ajustar_percentagem(item.strip()) for item in gun_van_texto.split(" | ") if item.strip()]
+
+                # Adicionar a lista com os itens, envolvendo as tags de lista
+                conteudo += "[List]\n"
+                for item in gun_van_itens:
+                    conteudo += f"[*] {item}\n"
+                conteudo += "[/List]\n\n"
             else:
-                gun_van_itens = gun_van_texto.splitlines()  # Separar por linha caso não tenha " | "
+                # Caso não esteja estruturado com " | ", processar cada linha como um item da lista
+                gun_van_linhas = [ajustar_percentagem(linha.strip()) for linha in gun_van_texto.splitlines() if linha.strip()]
 
-            # 🔹 Aplicar a função de ajustes a TODOS os itens ANTES de gerar o BBCode
-            gun_van_itens = [ajustar_percentagem(item.strip()) for item in gun_van_itens if item.strip()]
-
-            # 🔹 Adicionar a lista formatada ao BBCode
-            conteudo += "[List]\n"
-            for item in gun_van_itens:
-                conteudo += f"[*] {item}\n"
-            conteudo += "[/List]\n\n"
-
+                conteudo += "[List]\n"
+                for linha in gun_van_linhas:
+                    conteudo += f"[*] {linha}\n"
+                conteudo += "[/List]\n\n\n\n"
         else:
-            # Se a caixa estiver vazia, nada é adicionado
+            # Se não houver nada na caixa de texto, nada é adicionado
             pass
-
-
-
 
 
             
@@ -4598,16 +5054,7 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
             conteudo += "\n\n\n\n"  # Adicionar 3 linhas de espaço
         else:
             # Se o campo estiver vazio, não adicionar nada
-            pass
-
-
-        
-        
-
-
-
-
-        
+            pass        
 
 
 
@@ -4642,21 +5089,10 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
         
         
         
-
-
         def abrir_gerar_titulo():
             # Cálculo das datas
             hoje = datetime.date.today()
-
-            # Verificar se hoje é quinta-feira
-            if hoje.weekday() == 3:  # 3 representa a quinta-feira
-                inicio_semana = hoje
-            else:
-                # Se não for quinta-feira, vamos calcular a quinta-feira passada
-                dias_ate_quinta = (hoje.weekday() - 3) % 7
-                inicio_semana = hoje - datetime.timedelta(days=dias_ate_quinta)
-
-            # A data final é na próxima quarta-feira
+            inicio_semana = hoje if hoje.weekday() == 3 else hoje - datetime.timedelta(days=(hoje.weekday() + 3) % 7)  # Quinta anterior ou hoje
             fim_semana = inicio_semana + datetime.timedelta(days=6)
 
             # Formato das datas
@@ -4681,7 +5117,7 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
             if atividades and atividades != ['']:
                 for idx, atividade in enumerate(atividades):
                     ttk.Radiobutton(frame_atividades, text=atividade, variable=opcao_selecionada, value=atividade).pack(anchor="w")
-
+                
                 # Garantir que o primeiro radiobutton esteja selecionado por padrão
                 opcao_selecionada.set(atividades[0])
 
@@ -4699,7 +5135,7 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
             # Função para gerar o título
             def gerar_titulo():
                 atividade = entrada_outro.get() if opcao_selecionada.get() == "Outro" else opcao_selecionada.get()
-                titulo = f"GTA ONLINE - EVENTO SEMANAL - {atividade} | {data_inicio}-{data_fim}"
+                titulo = f"GTA ONLINE - EVENTO SEMANAL - {atividade} | {data_inicio}-{data_fim}"  # Removendo o espaço entre as datas
 
                 # Exibir o título em uma caixa de texto editável
                 titulo_text.delete("1.0", "end")  # Limpar conteúdo existente
@@ -4725,41 +5161,279 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
 
 
 
+
+
+######################################## BBcode missoes corridas Acrobaticas ########################################
+
+    def gerar_bbcode_missoes(self):
+        """Gera o BBCode apenas com a URL da imagem/vídeo e abre o preview."""
+    
+        # Obter o link da URL da imagem ou vídeo
+        url_capa = self.entrada_corridas_acrobaticas_url.get().strip()
+        
+        # Verificar se a URL é de uma imagem
+        def is_image_url(url):
+            image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']
+            return any(url.lower().endswith(ext) for ext in image_extensions)
+        
+        # Gerar a primeira linha do BBCode
+        if url_capa:
+            if is_image_url(url_capa):
+                bbcode = f"[img]{url_capa}[/img]\n\n\n"  # Adiciona BBCode de imagem
+            else:
+                bbcode = f"{url_capa}\n\n\n"  # Apenas o link
+        else:
+            bbcode = "\n\n\n"  # Apenas os 3 espaços vazios
+        
+        # Obter as descrições PT e EN
+        descricao_pt = self.entrada_corridas_acrobaticas_pt.get("1.0", "end-1c")
+        descricao_en = self.entrada_corridas_acrobaticas_en.get("1.0", "end-1c")
+        
+        # Gerar BBCode da descrição PT
+        if descricao_pt:
+            bbcode += f"[quote]{descricao_pt}[/quote]\n\n"
+        
+        # Gerar BBCode da descrição EN
+        if descricao_en:
+            bbcode += (
+                "[color=#FF0000]Versão em Ingles:[/color]\n"
+                f"[quote][spoiler]{descricao_en}[/spoiler][/quote]\n\n\n"
+            )
+
+        # Obter os valores das caixas de entrada
+        para = self.entrada_corridas_acrobaticas_para.get().strip()
+        local = "Todo o Mapa" if self.var_corridas_acrobaticas_todo_mapa.get() else self.entrada_corridas_acrobaticas_local.get().strip()
+        frequencia = self.entrada_corridas_acrobaticas_frequencia.get().strip()
+        numero_voltas = self.entrada_corridas_acrobaticas_numero_voltas.get().strip()
+        voltas_padrao = self.entrada_corridas_acrobaticas_numero_padrao_voltas.get().strip()
+        
+        # Adicionar prints para depuração
+        print(f"Para: {para}, Local: {local}, Frequência: {frequencia}, Voltas: {numero_voltas}")
+        
+        # Gerar o BBCode com os valores
+        bbcode_missoes = ""
+        
+        # Adicionar "Para" se o valor não estiver vazio
+        if para:
+            bbcode_missoes += f"[b]Para:[/b] [color=#BF0080]{para} Jogadores[/color] \n"
+        
+        # Adicionar "Local" se o valor não estiver vazio
+        if local:
+            bbcode_missoes += f"[b]Local:[/b] [color=#BF0080]{local}[/color] \n"
+        
+        # Adicionar "Frequência" se o valor não estiver vazio
+        if frequencia:
+            bbcode_missoes += f"[b]Frequência:[/b] [color=#BF0080]{frequencia}[/color] \n"
+        
+        # Adicionar "Voltas" se o valor não estiver vazio
+        if numero_voltas:
+            bbcode_missoes += f"[b]Voltas:[/b] [color=#BF0080]{numero_voltas} ({voltas_padrao} por padrão)[/color]\n\n\n"
+        
+        # Adicionar o BBCode da missão somente se houver algum conteúdo
+        if bbcode_missoes:
+            bbcode += bbcode_missoes
+
+        """Gera o BBCode com as informações de como funciona a missão."""
+        
+        # Inicializar o BBCode de "Como funciona"
+        bbcode_como_funciona = "[color=#804000][size=150]Como funciona:[/size][/color]\n[hr][/hr]\n\n"
+        
+        # Caminho do menu pausa
+        caminho_pausa = ""
+        if self.var_corridas_acrobaticas_como_funciona_menu_pausa.get():
+            caminho_pausa = (
+                "Menu Pausa - Online - Jobs - Play Job - Rockstar Created - Races - Stunt Races\n"
+                "Menu Pausa - Online - Serviços - Jogar Serviço - Criados pela Rockstar - Corridas - Corridas Acrobáticas"
+            )
+        
+        # Caminho do telefone
+        caminho_telefone = ""
+        if self.var_corridas_acrobaticas_como_funciona_tel.get():
+            caminho_telefone = (
+                "Início Rápido - Modo em Serie - Stunt Races\n"
+                "Quick Join - Series Mode - Corridas Acrobáticas"
+            )
+        
+        # Obter o texto da caixa "Como Funciona"
+        como_funciona = self.entrada_corridas_acrobaticas_como_funciona.get("1.0", "end-1c").strip()
+        
+        # Adicionar BBCode do caminho do menu pausa, caso o texto não esteja vazio
+        if caminho_pausa:
+            bbcode_como_funciona += "\"Podes iniciar a missão em:\"\n[code]" + caminho_pausa + "[/code]\n\n"
+        
+        # Adicionar BBCode do caminho do telefone, caso o texto não esteja vazio
+        if caminho_telefone:
+            bbcode_como_funciona += "\"No teu telefone\"\n[code]" + caminho_telefone + "[/code]\n\n\n"
+        
+        # Adicionar a caixa de texto "Como Funciona", caso não esteja vazia
+        if como_funciona:
+            bbcode_como_funciona += f"{como_funciona}\n\n\n"
+        
+        # Adicionar o BBCode "Como Funciona" somente se ele tiver conteúdo
+        if caminho_pausa or caminho_telefone or como_funciona:
+            bbcode += bbcode_como_funciona
+
+
+
+        # Inicializar o BBCode da categoria Veículos
+        bbcode_veiculos = "[color=#804000][size=150]Veículos:[/size][/color]\n[hr][/hr]\n\n"
+        
+        # Obter os nomes e imagens dos veículos
+        nomes_veiculos = self.entrada_corridas_acrobaticas_nome_veiculo.get("1.0", "end-1c").split("\n")
+        imagens_veiculos = self.entrada_corridas_acrobaticas_imagem_veiculo.get("1.0", "end-1c").split("\n")
+        
+        # Verificar se há alguma informação para processar
+        if any(nome or imagem for nome, imagem in zip(nomes_veiculos, imagens_veiculos)):
+            bbcode_veiculos += "[list]\n"  # Abre a lista
+            
+            for nome, imagem in zip(nomes_veiculos, imagens_veiculos):
+                nome_formatado = f"[*] {nome}" if nome else "[*]"
+                bbcode_veiculos += f"{nome_formatado}\n"
+                if imagem:
+                    bbcode_veiculos += f"{imagem}\n"
+            
+            bbcode_veiculos += "[/list]\n\n\n\n"  # Fecha a lista
+            
+            # Adicionar o BBCode gerado ao resultado final
+            bbcode += bbcode_veiculos
+            
+            
+            
+        # Inicializar o BBCode da categoria Corridas
+        bbcode_corridas = "[color=#804000][size=150]Corridas:[/size][/color]\n[hr][/hr]\n"
+
+        # Obter os valores das caixas de entrada
+        nomes_corridas = self.entrada_corridas_acrobaticas_lista_corridas.get("1.0", "end-1c").split("\n")
+
+        # Verificar se há alguma informação para processar
+        if nomes_corridas:
+            lista_corridas = []
+            
+            for linha in nomes_corridas:
+                if "Added as part of the" in linha:
+                    # Fechar a lista atual e adicionar a parte do evento
+                    if lista_corridas:
+                        bbcode_corridas += "[list]\n"
+                        for corrida in lista_corridas:
+                            bbcode_corridas += f"[*][color=#FFFF00]{corrida}[/color]\n"
+                        bbcode_corridas += "[/list]\n"
+                        lista_corridas = []
+
+                    # Identificar o evento e adicionar
+                    # Remover "event" e a data entre parênteses
+                    evento = linha.split("Added as part of the")[1].split("week")[0].strip()
+                    bbcode_corridas += f"\n\nAdicionado como parte do evento {evento}\n\n"
+                else:
+                    lista_corridas.append(linha)
+
+            # Adicionar a última lista de corridas
+            if lista_corridas:
+                bbcode_corridas += "[list]\n"
+                for corrida in lista_corridas:
+                    bbcode_corridas += f"[*][color=#FFFF00]{corrida}[/color]\n"
+                bbcode_corridas += "[/list]\n"
+
+            # Adicionar as linhas em branco finais
+            bbcode_corridas += "\n\n\n"
+
+            # Adicionar o BBCode gerado ao resultado final
+            bbcode += bbcode_corridas
+
+
+            
+            
+            
+            # Inicializar o BBCode da categoria Dicas
+            bbcode_dicas = "[b][size=150][color=#FF0000]Dicas:[/color][/size][/b]\n\n[list]\n"
+            dicas = self.entrada_corridas_acrobaticas_descricao_dicas.get("1.0", "end-1c").split("\n")
+
+            if any(dica for dica in dicas):
+                for dica in dicas:
+                    if dica:
+                        bbcode_dicas += f"[*] {dica}\n"
+                bbcode_dicas += "[/list]\n\n\n"
+                bbcode += bbcode_dicas
+
+
+
+            # Inicializar o BBCode da categoria Vídeos
+            bbcode_videos = ""
+            videos = self.entrada_corridas_acrobaticas_descricao_video_guia.get("1.0", "end-1c").split("\n")
+
+            if any(video for video in videos):
+                for video in videos:
+                    if video:
+                        bbcode_videos += f"{video}\n"
+                bbcode_videos += "\n\n\n"
+                bbcode += bbcode_videos
+
+
+
+
+        # Agora chamamos abrir_preview_bbcode passando o BBCode gerado
+        self.abrir_preview_bbcode_missoes(bbcode)
+        
+        
+        
+    
+    
+    
+    
+    
     
     def associar_botao_filtro(self, entrada):
         """Vincula a entrada ao evento FocusOut, registra os filtros corretamente e adiciona botão de filtro."""
 
-        entrada_id = str(entrada)  # Usamos o identificador de string para evitar erros no JSON
+        entrada_id = str(entrada)  # Identificador único
 
-        # ⚠️ Se a entrada ainda não tem filtros atribuídos, copia os filtros corretos
+        # Se a entrada ainda não tem filtros atribuídos, copia os filtros corretos
         if entrada_id not in self.filtros_por_entrada or not self.filtros_por_entrada[entrada_id]:
             self.filtros_por_entrada[entrada_id] = self.opcoes_filtro.copy()
-        
 
         # Garante que o evento FocusOut chame aplicar_filtros corretamente
         entrada.bind("<FocusOut>", lambda event: self.aplicar_filtros(event, entrada))
 
-        # Manter a lógica original do botão de filtro
-        if not hasattr(self, "botoes_filtros"):  # Garante que a estrutura exista
+        if not hasattr(self, "botoes_filtros"):
             self.botoes_filtros = {}
 
         frame = entrada.master  # Obtém o frame onde a caixa de texto está
-        info_grid = entrada.grid_info()  # Obtém as informações de posição da caixa
+        info_grid = entrada.grid_info()  # Obtém as informações de posição da entrada
 
-        if info_grid:  # Certifica que a entrada está posicionada no grid
-            row = info_grid["row"]  # Pega a linha onde a entrada está
+        if info_grid:
+            row = info_grid["row"]
+            column = info_grid["column"]
+            columnspan = int(info_grid.get("columnspan", 1))  # Obtém o columnspan
 
-            # Criar e posicionar o botão de filtro na mesma linha
+            # Criar e posicionar o botão de filtro corretamente
             botao_filtro = ttk.Button(
                 frame,
                 text="🔍",
-                width=5,
+                width=2,
                 command=lambda: self.abrir_filtros(entrada)
             )
-            botao_filtro.grid(row=row, column=1, padx=5, pady=5, sticky="w")
+
+            # Se a entrada está na coluna 0 e há outra entrada na coluna 1 na mesma linha
+            outra_entrada = None
+            for widget in frame.winfo_children():
+                info = widget.grid_info()
+                if info and info.get("row") == row and info.get("column") == 1:
+                    outra_entrada = widget
+                    break
+
+            if column == 0 and outra_entrada:
+                # Ajuste do botão para não sobrepor a caixa de texto na coluna 1
+                botao_filtro.grid(row=row, column=column, padx=(2, 1), pady=5, sticky="e")  # Reduzir o padding para não sobrepor
+            else:
+                botao_filtro.grid(row=row, column=column + columnspan, padx=(2, 5), pady=5, sticky="w")
+
 
             # Armazena o botão de filtro para referência futura
             self.botoes_filtros[entrada_id] = botao_filtro
+
+
+
+
+
 
 
 
@@ -4770,13 +5444,9 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
         self.janela_filtros = tk.Toplevel(self.root)
         self.janela_filtros.title("Selecionar Filtros")
         self.janela_filtros.geometry("450x500")
-        
-        entrada_id = str(entrada_associada)
-        filtros_entrada = self.filtros_por_entrada.get(entrada_id, self.opcoes_filtro.copy())
 
         print(f"Entrada associada: {entrada_associada}")
         print("Estado inicial dos filtros:", self.opcoes_filtro)
-        print(f"Estado inicial dos filtros: {filtros_entrada}")
 
         self.janela_filtros.transient(self.root)
         self.janela_filtros.focus_set()
@@ -4857,39 +5527,15 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
         frame_botao = ttk.Frame(frame_principal)
         frame_botao.grid(row=2, column=0, pady=10, sticky="sew")
 
-        btn_guardar = ttk.Button(
-            frame_botao, text="Aplicar Filtros",
-            command=lambda: self.guardar_selecao_filtros(entrada_associada), width=20
-        )
+        btn_guardar = ttk.Button(frame_botao, text="Aplicar Filtros",
+                                command=lambda: self.guardar_selecao_filtros(entrada_associada), width=20)
         btn_guardar.grid(row=0, column=0, pady=5)
 
         frame_botao.grid_columnconfigure(0, weight=1, uniform="equal")
         frame_botao.grid_rowconfigure(0, weight=1)
 
         self.janela_filtros.protocol("WM_DELETE_WINDOW", self.janela_filtros.destroy)
-        print(f"Filtros antes de salvar para {entrada_id}: {self.filtros_por_entrada}")
 
-
-    def guardar_selecao_filtros(self, entrada_associada):
-        if not entrada_associada:
-            messagebox.showerror("Erro", "Nenhuma caixa de texto associada!")
-            return
-
-        entrada_id = str(entrada_associada)
-        
-        if entrada_id not in self.filtros_por_entrada:
-            self.filtros_por_entrada[entrada_id] = {}
-
-        for categoria, var in self.filtros_selecionados.items():
-            estado_checkbox = var.get()
-            estado_radio = self.opcoes_vars[categoria].get()
-            self.filtros_por_entrada[entrada_id][categoria] = estado_radio if estado_checkbox else 2  # Traduzir como padrão
-
-
-        print(f"Filtros salvos para {entrada_id}: {self.filtros_por_entrada[entrada_id]}")  # Depuração
-        self.salvar_preferencias()
-        self.janela_filtros.destroy()
-        self.aplicar_filtros(None, entrada_associada)  # Aplica os filtros após salvar
 
 
     def update_master_status(self):
@@ -4902,7 +5548,7 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
         elif traduzir_todos:
             self.master_option_var.set(2)
         else:
-            self.master_option_var.set(0)  # Estado misto
+            self.master_option_var.set(0)
 
 
     def toggle_master_remove(self):
@@ -4936,6 +5582,30 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
             if isinstance(widget, ttk.Label) and widget.winfo_name() == nome_label:
                 return widget.cget("text")
         return "Sem Título"  # Caso não encontre o label correspondente
+    
+    
+    def atualizar_base_dados_para_pt_en(self):
+        """Atualiza todos os itens da base de dados para garantir o formato correto."""
+        for categoria, itens in self.base_dados.items():
+            novos_itens = []
+            for item in itens:
+                if len(item) == 2:  # Se só há PT e EN, adiciona PT (EN)
+                    pt, en = item
+                    termo_combinado = f"{pt} ({en})"
+                    novos_itens.append([pt, en, termo_combinado])
+                elif len(item) == 3:
+                    pt, en, _ = item  # Ignorar o termo existente e gerar novamente
+                    termo_combinado = f"{pt} ({en})"
+                    novos_itens.append([pt, en, termo_combinado])
+                else:
+                    print(f"Item inválido encontrado: {item}")  # Depuração
+            self.base_dados[categoria] = novos_itens
+        print("Base de dados atualizada para incluir PT (EN).")
+        self.salvar_base_dados()
+
+
+
+
 
     def abrir_base_dados_categoria(self, categoria):
         """Abre a base de dados e rola até a categoria especificada."""
@@ -4949,8 +5619,22 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
         if categoria not in self.base_dados:
             messagebox.showinfo("Aviso", f"A categoria '{categoria}' não existe.")
             return
-        # Exibir dados da categoria corretamente
+        # Exibir dados da categoria corretamentedef salvar_categoria():
+
         print(f"Expandindo a categoria: {categoria}")
+        
+        if not self.base_dados:
+            try:
+                with open(self.caminho_base_dados.get(), "r", encoding="utf-8") as arquivo:
+                    self.base_dados = json.load(arquivo)
+                    self.atualizar_base_dados_para_pt_en()  # Garante o formato correto
+            except FileNotFoundError:
+                self.base_dados = {}
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro ao carregar a base de dados: {e}")
+
+
+
     def rolar_para_categoria(self, categoria):
         """Rola para a categoria especificada e expande apenas ela."""
         
@@ -4982,85 +5666,19 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
 
 
 
-    def aplicar_filtros(self, event, entrada):
-        """Aplica os filtros quando o Entry ou Text perde o foco ou uma tecla é liberada, evitando substituições repetidas."""
-        print("\n--- APLICANDO FILTROS AO PERDER O FOCO OU TECLA SOLTA ---")
+    def guardar_selecao_filtros(self, entrada_associada):
+        """Salva os filtros escolhidos pelo usuário."""
+        print("\n--- APLICANDO FILTROS ---")
 
-        entrada_id = str(entrada)
-        if entrada_id not in self.filtros_por_entrada or not self.filtros_por_entrada[entrada_id]:
-            print("❌ Nenhum filtro ativo para essa entrada!")
-            return
+        for categoria, var in self.filtros_selecionados.items():
+            estado_checkbox = var.get()
+            estado_radio = self.opcoes_vars[categoria].get()
+            self.opcoes_filtro[categoria] = estado_radio if estado_checkbox else 0  # 0 = Desativado
+            
+            print(f"🟢 Categoria: {categoria} | Checkbox: {estado_checkbox} | Opção selecionada: {estado_radio}")
 
-        filtros = self.filtros_por_entrada[entrada_id]
-        print(f"📌 Filtros aplicados: {filtros}")
-
-        texto = entrada.get("1.0", "end-1c").strip() if isinstance(entrada, tk.Text) else entrada.get().strip()
-        print(f"🔹 Texto original: {texto}")
-
-        texto_alterado = False
-        linhas = texto.split("\n")
-
-        for i, linha in enumerate(linhas):
-            termos_substituidos = set()  # Controla quais termos já foram substituídos
-
-            for categoria, acao in filtros.items():
-                conteudos = sorted(self.base_dados.get(categoria, []), key=lambda x: -len(x[0]))  # Ordena por tamanho maior primeiro
-
-                for pt, en, pt_en in conteudos:
-                    pt_pattern = re.escape(pt)
-                    en_pattern = re.escape(en)
-
-                    # **Se a linha já contém pt_en, NÃO faz mais nada**
-                    if pt_en in linha:
-                        continue  
-
-                    # **SUBSTITUIR APENAS PELO `pt_en` DA BASE DE DADOS**
-                    if acao == 2:  # Traduzir
-                    for pt, en, pt_en in conteudos:
-                        if pt_en in linha:
-                            continue  # Já está traduzido
-
-                        if re.search(rf"\b{pt_pattern}\b", linha, re.IGNORECASE) or re.search(rf"\b{en_pattern}\b", linha, re.IGNORECASE):
-                            linha = re.sub(rf"\b{pt_pattern}\b", pt_en, linha, flags=re.IGNORECASE)
-                            linha = re.sub(rf"\b{en_pattern}\b", pt_en, linha, flags=re.IGNORECASE)
-                            texto_alterado = True
-
-                            termos_substituidos.add(pt_en)  # Marca que este termo já foi substituído
-                            break  # **Sai do loop para evitar traduções menores**
-
-                    elif acao == 1:  # Remover
-                        if re.search(rf"\b{pt_pattern}\b", linha, re.IGNORECASE) or re.search(rf"\b{en_pattern}\b", linha, re.IGNORECASE):
-                            linha = re.sub(rf"\b{pt_pattern}\b", "", linha, flags=re.IGNORECASE)
-                            linha = re.sub(rf"\b{en_pattern}\b", "", linha, flags=re.IGNORECASE)
-                            texto_alterado = True
-                            termos_substituidos.add(pt)
-                            termos_substituidos.add(en)
-
-                linhas[i] = linha  # Atualiza a linha com as modificações feitas
-
-        # Limpeza final para evitar parênteses vazios
-        texto_modificado = "\n".join(linhas).replace("() ", "").replace(" ()", "").replace("()", "")
-
-        if texto_alterado:
-            if isinstance(entrada, tk.Text):
-                entrada.delete("1.0", "end")
-                entrada.insert("1.0", texto_modificado)
-            elif isinstance(entrada, tk.Entry):
-                entrada.delete(0, "end")
-                entrada.insert(0, texto_modificado)
-            print(f"✅ Texto modificado: {texto_modificado}")
-        else:
-            print("⚠️ Nenhuma alteração necessária.")
-
-
-
-
-
-
-
-
-
-
+        self.salvar_preferencias()
+        self.janela_filtros.destroy()
         
         
         
@@ -5074,73 +5692,107 @@ Acesso a garagem do [b]Vinewood Club para 100 veiculos,[/b] completa com [b]Ofic
             entrada.bind("<KeyRelease>", lambda event: self.aplicar_filtros(event, entrada))
 
     def aplicar_filtros(self, event, entrada):
-        """Aplica os filtros quando o Entry ou Text perde o foco ou uma tecla é liberada, sem duplicações."""
+        """Aplica os filtros quando o Entry ou Text perde o foco ou uma tecla é liberada."""
         print("\n--- APLICANDO FILTROS AO PERDER O FOCO OU TECLA SOLTA ---")
 
-        entrada_id = str(entrada)
+        entrada_id = str(entrada)  # Transformamos a entrada em string para acessar o dicionário corretamente
+        print(f"🔹 Entrada identificada: {entrada_id}")
+
+        # Verificar se há filtros para essa entrada e garantir que não estejam vazios
         if entrada_id not in self.filtros_por_entrada or not self.filtros_por_entrada[entrada_id]:
-            print("❌ Nenhum filtro ativo para essa entrada!")
-            return
+            print("❌ Nenhum filtro ativo para essa entrada! Verificando se precisa atualizar os filtros...")
+
+            # Tenta recuperar filtros das preferências
+            if self.opcoes_filtro:
+                print(f"🔄 Recuperando filtros das preferências para {entrada_id}...")
+                self.filtros_por_entrada[entrada_id] = self.opcoes_filtro.copy()
+                print(f"✅ Filtros atualizados: {self.filtros_por_entrada[entrada_id]}")
+            else:
+                print("⚠️ Não há filtros para restaurar. Abortando aplicação.")
+                return
 
         filtros = self.filtros_por_entrada[entrada_id]
         print(f"📌 Filtros aplicados: {filtros}")
 
-        texto = entrada.get("1.0", "end-1c").strip() if isinstance(entrada, tk.Text) else entrada.get().strip()
-        print(f"🔹 Texto original: {texto}")
+        # Obter o texto dependendo do tipo do widget
+        if isinstance(entrada, tk.Entry):
+            texto = entrada.get().strip()
+        elif isinstance(entrada, tk.Text):
+            texto = entrada.get("1.0", "end-1c").strip()
+        else:
+            print("⚠️ Tipo de widget desconhecido, ignorando...")
+            return
 
+        print(f"🔹 Texto original: {texto}")
         texto_alterado = False
         linhas = texto.split("\n")
 
-        for i, linha in enumerate(linhas):
-            termos_modificados = set()  # Controla quais termos já foram alterados
+        for categoria, acao in filtros.items():
+            for item in self.base_dados.get(categoria, []):
+                if len(item) == 3:
+                    pt, en, pt_en = item
+                elif len(item) == 2:
+                    pt, en = item
+                    pt_en = f"{pt} ({en})"  # Gera dinamicamente se estiver errado
+                else:
+                    print(f"⚠ Entrada inválida na categoria '{categoria}': {item}")
+                    continue  # Pula a entrada errada
 
-            for categoria, acao in filtros.items():
-                conteudos = sorted(self.base_dados.get(categoria, []), key=lambda x: len(x[0]), reverse=True)
 
-                for pt, en, pt_en in conteudos:
-                    pt_pattern = re.escape(pt)
-                    en_pattern = re.escape(en)
+                # Primeiro, ordenar as substituições pela maior expressão (mais longa)
+                expressao_original = [(pt, en)]  # Lista de expressões (termos a serem substituídos)
+                expressao_original.sort(key=lambda x: len(x[0]), reverse=True)  # Ordenar pela maior expressão
 
-                    # **SUBSTITUIR APENAS PELO VALOR `pt_en` DA BASE DE DADOS**
-                    if acao == 2:  # Traduzir
-                        # Se encontrar `pt`, substituir por `pt_en` da base de dados
+                for pt, en in expressao_original:  # Aqui iteramos nas expressões ordenadas
+                    for i, linha in enumerate(linhas):
+                        # Verificar se já foi traduzido para evitar redundância
+                        if re.search(rf"\b{pt_pattern}\b \({en_pattern}\)", linha, re.IGNORECASE) or \
+                        re.search(rf"\b{en_pattern}\b \({pt_pattern}\)", linha, re.IGNORECASE):
+                            continue
+
+                        # Aplicação de filtros com case-insensitive
                         if re.search(rf"\b{pt_pattern}\b", linha, re.IGNORECASE):
-                            if pt_en not in linha:  # Evita duplicação
-                                linha = re.sub(rf"\b{pt_pattern}\b", pt_en, linha, flags=re.IGNORECASE)
+                            if acao == 2:  # Traduzir
+                                linhas[i] = re.sub(rf"\b{pt_pattern}\b", f"{pt} ({en})", linha, flags=re.IGNORECASE, count=1)
                                 texto_alterado = True
-                                termos_modificados.add(pt)
+                            elif acao == 1:  # Remover
+                                linhas[i] = re.sub(rf"\b{pt_pattern}\b", "", linha, flags=re.IGNORECASE, count=1)
+                                texto_alterado = True
 
-                        # Se encontrar `en`, substituir por `pt_en` da base de dados
                         if re.search(rf"\b{en_pattern}\b", linha, re.IGNORECASE):
-                            if pt_en not in linha:  # Evita duplicação
-                                linha = re.sub(rf"\b{en_pattern}\b", pt_en, linha, flags=re.IGNORECASE)
+                            if acao == 2:  # Traduzir
+                                linhas[i] = re.sub(rf"\b{en_pattern}\b", f"{en} ({pt})", linha, flags=re.IGNORECASE, count=1)
                                 texto_alterado = True
-                                termos_modificados.add(en)
+                            elif acao == 1:  # Remover
+                                linhas[i] = re.sub(rf"\b{en_pattern}\b", "", linha, flags=re.IGNORECASE, count=1)
+                                texto_alterado = True
 
-                    elif acao == 1:  # Remover
-                        if re.search(rf"\b{pt_pattern}\b", linha, re.IGNORECASE) or re.search(rf"\b{en_pattern}\b", linha, re.IGNORECASE):
-                            linha = re.sub(rf"\b{pt_pattern}\b", "", linha, flags=re.IGNORECASE)
-                            linha = re.sub(rf"\b{en_pattern}\b", "", linha, flags=re.IGNORECASE)
-                            texto_alterado = True
-                            termos_modificados.add(pt)
-                            termos_modificados.add(en)
+            # Reconstruir o texto final removendo parênteses vazios
+            texto_modificado = "\n".join(linhas).replace("() ", "").replace(" ()", "").replace("()", "")
 
-                linhas[i] = linha  # Atualiza a linha com as modificações feitas
+            # Atualizar a entrada apenas se houver alterações
+            if texto_alterado:
+                if isinstance(entrada, tk.Text):
+                    entrada.delete("1.0", "end")
+                    entrada.insert("1.0", texto_modificado)
+                elif isinstance(entrada, tk.Entry):
+                    entrada.delete(0, "end")
+                    entrada.insert(0, texto_modificado)
+                print(f"✅ Texto modificado: {texto_modificado}")
+            else:
+                print("⚠️ Nenhuma alteração necessária.")
 
-        # Limpeza final para evitar parênteses vazios
-        texto_modificado = "\n".join(linhas).replace("() ", "").replace(" ()", "").replace("()", "")
 
-        if texto_alterado:
-            if isinstance(entrada, tk.Text):
-                entrada.delete("1.0", "end")
-                entrada.insert("1.0", texto_modificado)
-            elif isinstance(entrada, tk.Entry):
-                entrada.delete(0, "end")
-                entrada.insert(0, texto_modificado)
-            print(f"✅ Texto modificado: {texto_modificado}")
-        else:
-            print("⚠️ Nenhuma alteração necessária.")
 
+
+
+
+
+
+
+
+
+    
 
 
 
@@ -5223,4 +5875,15 @@ if __name__ == "__main__":
     app = GTAptWindow()
     app.run()
 
-«
+
+
+
+
+
+
+
+
+        ######################################################################################################################################################
+        ############################# Base de dados  ##############################################################################################################
+        ######################################################################################################################################################
+
